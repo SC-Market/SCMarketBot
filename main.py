@@ -86,13 +86,13 @@ class SCMarket(Bot):
                 invite = None
 
             if not thread:
-                thread = dict(thread_id=None, failed=True, message=result.error,
+                thread = dict(thread_id=None,
                               invite_code=str(invite) if invite else None)
 
-            return dict(thread=thread, invite_code=invite)
+            return dict(thread=thread, failed=bool(result.error), message=result.error, invite_code=invite)
         except:
             traceback.print_exc()
-            return dict(thread=None, invite_code=None)
+            return dict(thread=None, failed=True, message="An unknown error occurred", invite_code=None)
 
     async def verify_invite(self, customer_id, server_id, channel_id, invite_code):
         guild: discord.Guild = await self.fetch_guild(int(server_id))
