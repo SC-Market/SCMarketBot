@@ -169,8 +169,10 @@ class SCMarket(Bot):
                 channel: discord.TextChannel = await guild.fetch_channel(int(channel_id))
             if not channel:
                 return Result(error="The configured thread channel no longer exists")
-        except (discord.InvalidData, discord.Forbidden):
+        except discord.Forbidden:
             return Result(error="The bot does not have permission to view the configured thread channel")
+        except discord.InvalidData:
+            return Result(error="The bot received invalid data from Discord when attempting to fetch the configured thread channel")
 
         is_order = offer.get("order_id")
 
