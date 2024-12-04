@@ -14,6 +14,7 @@ from cogs.order import order
 from cogs.registration import Registration, DISCORD_BACKEND_URL
 from cogs.stock import stock
 from util.api_server import create_api
+from util.result import Result
 
 intents = discord.Intents.default()
 intents.members = True
@@ -65,12 +66,14 @@ class SCMarket(Bot):
 
     async def order_placed(self, body):
         try:
-            thread = await self.create_thread(
+            result = await self.create_thread(
                 body.get('server_id'),
                 body.get('channel_id'),
                 body.get('members'),
                 body.get('order'),
             )
+
+            thread = result.value
 
             if body.get('server_id') and body.get('channel_id'):
                 invite = await self.verify_invite(
@@ -83,7 +86,8 @@ class SCMarket(Bot):
                 invite = None
 
             if not thread:
-                thread = dict(thread_id=None, failed=True, invite_code=str(invite) if invite else None)
+                thread = dict(thread_id=None, failed=True, message=result.error,
+                              invite_code=str(invite) if invite else None)
 
             return dict(thread=thread, invite_code=invite)
         except:
@@ -157,23 +161,26 @@ class SCMarket(Bot):
 
         guild: discord.Guild = await self.fetch_guild(int(server_id))
         if not guild:
-            return
+            return Result(error="Bot is not in the configured guild")
 
         try:
             channel = guild.get_channel(int(channel_id))
             if not channel:
                 channel: discord.TextChannel = await guild.fetch_channel(int(channel_id))
             if not channel:
-                return
+                return Result(error="The configured thread channel no longer exists")
         except (discord.InvalidData, discord.Forbidden):
-            return
+            return Result(error="The bot does not have permission to view the configured thread channel")
 
         is_order = offer.get("order_id")
 
-        thread = await channel.create_thread(
-            name=f"{'order' if is_order else 'offer'}-{offer.get('id', offer.get('order_id'))[:8]}",
-            type=ChannelType.private_thread
-        )
+        try:
+            thread = await channel.create_thread(
+                name=f"{'order' if is_order else 'offer'}-{offer.get('id', offer.get('order_id'))[:8]}",
+                type=ChannelType.private_thread
+            )
+        except:
+            return Result(error="The bot does not have permission to create threads in the configured channel")
 
         await thread.add_user(self.user)
 
@@ -203,7 +210,7 @@ class SCMarket(Bot):
             except Exception as e:
                 print(e)
 
-        return dict(thread_id=str(thread.id), failed=failed, invite_code=str(invite) if invite else None)
+        return Result(value=dict(thread_id=str(thread.id), failed=failed, invite_code=str(invite) if invite else None))
 
 
 bot = SCMarket(intents=intents, command_prefix="/")
