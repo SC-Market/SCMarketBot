@@ -89,6 +89,7 @@ class SCMarket(Bot):
                 thread = dict(thread_id=None,
                               invite_code=str(invite) if invite else None)
 
+                print("Received error:", result.error)
             return dict(thread=thread, failed=bool(result.error), message=result.error, invite_code=invite)
         except:
             traceback.print_exc()
@@ -157,7 +158,7 @@ class SCMarket(Bot):
 
     async def create_thread(self, server_id: int, channel_id: int, members: list[int], offer: dict):
         if not server_id or not channel_id or not members:
-            return
+            return Result(error="Server or Channel or Members are not configured")
 
         guild: discord.Guild = await self.fetch_guild(int(server_id))
         if not guild:
