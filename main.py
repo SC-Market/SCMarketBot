@@ -167,7 +167,10 @@ class SCMarket(Bot):
         try:
             channel = guild.get_channel(int(channel_id))
             if not channel:
-                channel: discord.TextChannel = await guild.fetch_channel(int(channel_id))
+                try:
+                    channel: discord.TextChannel = await guild.fetch_channel(int(channel_id))
+                except discord.NotFound:
+                    pass
             if not channel:
                 return Result(error="The configured thread channel no longer exists")
         except discord.Forbidden:
