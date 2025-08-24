@@ -3,3 +3,4 @@ discord.py
 aiohttp
 humanize
 ujson
+boto3

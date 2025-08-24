@@ -11,10 +11,13 @@ from discord.ext.commands import Bot
 from cogs.admin import Admin
 from cogs.lookup import Lookup
 from cogs.order import order
-from cogs.registration import Registration, DISCORD_BACKEND_URL
+from cogs.registration import Registration
 from cogs.stock import stock
 from util.api_server import create_api
+from util.config import Config
 from util.result import Result
+from util.sqs_manager import SQSManager
+from util.discord_sqs_consumer import DiscordSQSManager
 
 intents = discord.Intents.default()
 intents.members = True
@@ -26,6 +29,8 @@ logger.setLevel(logging.DEBUG)
 
 class SCMarket(Bot):
     session = None
+    sqs_manager = None
+    discord_sqs_manager = None
 
     async def setup_hook(self):
         await self.add_cog(Registration(self))
@@ -36,10 +41,22 @@ class SCMarket(Bot):
 
         await self.tree.sync()
 
-        runner = web.AppRunner(api)
-        await runner.setup()
-        site = web.TCPSite(runner, '0.0.0.0', 8080)
-        self.loop.create_task(site.start())
+        # Initialize Discord SQS manager if enabled
+        if Config.ENABLE_SQS:
+            self.discord_sqs_manager = DiscordSQSManager(self)
+            if await self.discord_sqs_manager.initialize():
+                await self.discord_sqs_manager.start_consumer()
+                logger.info("Discord SQS consumer started successfully")
+            else:
+                logger.error("Failed to initialize Discord SQS manager")
+
+        # Start web server if enabled
+        if Config.ENABLE_WEB_SERVER:
+            runner = web.AppRunner(api)
+            await runner.setup()
+            site = web.TCPSite(runner, Config.WEB_SERVER_HOST, Config.WEB_SERVER_PORT)
+            self.loop.create_task(site.start())
+            logger.info(f"Web server started on {Config.WEB_SERVER_HOST}:{Config.WEB_SERVER_PORT}")
 
         self.session = aiohttp.ClientSession()
         logger.info("Ready!")
@@ -53,16 +70,16 @@ class SCMarket(Bot):
     async def on_message(self, message):
         if isinstance(message.channel, discord.Thread):
             if not message.author.bot and message.content:
-                async with self.session.post(
-                        f'{DISCORD_BACKEND_URL}/threads/message',
-                        json=dict(
-                            author_id=str(message.author.id),
-                            name=message.author.name,
-                            thread_id=str(message.channel.id),
-                            content=message.content,
-                        )
-                ) as resp:
-                    await resp.read()
+                        async with self.session.post(
+                f'{Config.DISCORD_BACKEND_URL}/threads/message',
+                json=dict(
+                    author_id=str(message.author.id),
+                    name=message.author.name,
+                    thread_id=str(message.channel.id),
+                    content=message.content,
+                )
+        ) as resp:
+            await resp.read()
 
     async def order_placed(self, body):
         try:
@@ -130,7 +147,7 @@ class SCMarket(Bot):
         try:
             async with aiohttp.ClientSession() as session:
                 async with session.get(
-                        f'{DISCORD_BACKEND_URL}/threads/user/{member.id}',
+                        f'{Config.DISCORD_BACKEND_URL}/threads/user/{member.id}',
                 ) as resp:
                     if not resp.ok:
                         logger.error("Failed to fetch threads: %s", resp.reason)
@@ -219,7 +236,24 @@ class SCMarket(Bot):
         return Result(value=dict(thread_id=str(thread.id), failed=failed, invite_code=str(invite) if invite else None))
 
 
-bot = SCMarket(intents=intents, command_prefix="/")
-api = create_api(bot)
+def main():
+    # Validate configuration
+    config_issues = Config.validate()
+    if config_issues:
+        logger.error("Configuration validation failed:")
+        for issue, description in config_issues.items():
+            logger.error(f"  {issue}: {description}")
+        return
+    
+    bot = SCMarket(intents=intents, command_prefix="/")
+    api = create_api(bot)
+    
+    try:
+        bot.run(Config.DISCORD_API_KEY)
+    except KeyboardInterrupt:
+        logger.info("Shutting down bot...")
+        if bot.discord_sqs_manager:
+            asyncio.run(bot.discord_sqs_manager.stop_consumer())
 
-bot.run(os.environ.get("DISCORD_API_KEY"))
+if __name__ == "__main__":
+    main()
