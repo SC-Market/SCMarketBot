@@ -31,13 +31,8 @@ class Config:
         'retry_delay': int(os.environ.get('SQS_RETRY_DELAY', '5'))
     }
     
-    # Web server settings
-    WEB_SERVER_HOST = os.environ.get('WEB_SERVER_HOST', '0.0.0.0')
-    WEB_SERVER_PORT = int(os.environ.get('WEB_SERVER_PORT', '8080'))
-    
     # Feature flags
     ENABLE_SQS = os.environ.get('ENABLE_SQS', 'true').lower() == 'true'
-    ENABLE_WEB_SERVER = os.environ.get('ENABLE_WEB_SERVER', 'true').lower() == 'true'
     ENABLE_DISCORD_QUEUE = os.environ.get('ENABLE_DISCORD_QUEUE', 'true').lower() == 'true'
     
     @classmethod

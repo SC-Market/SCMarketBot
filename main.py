@@ -4,7 +4,7 @@ import traceback
 
 import aiohttp
 import discord
-from aiohttp import web
+
 from discord import ChannelType
 from discord.ext.commands import Bot
 
@@ -13,7 +13,7 @@ from cogs.lookup import Lookup
 from cogs.order import order
 from cogs.registration import Registration
 from cogs.stock import stock
-from util.api_server import create_api
+
 from util.config import Config
 from util.result import Result
 from util.discord_sqs_consumer import DiscordSQSManager
@@ -28,7 +28,6 @@ logger.setLevel(logging.DEBUG)
 
 class SCMarket(Bot):
     session = None
-    sqs_manager = None
     discord_sqs_manager = None
 
     async def setup_hook(self):
@@ -49,19 +48,26 @@ class SCMarket(Bot):
             else:
                 logger.error("Failed to initialize Discord SQS manager")
 
-        # Start web server if enabled
-        if Config.ENABLE_WEB_SERVER:
-            runner = web.AppRunner(api)
-            await runner.setup()
-            site = web.TCPSite(runner, Config.WEB_SERVER_HOST, Config.WEB_SERVER_PORT)
-            self.loop.create_task(site.start())
-            logger.info(f"Web server started on {Config.WEB_SERVER_HOST}:{Config.WEB_SERVER_PORT}")
+        # SQS-only mode - no web server needed
+        logger.info("Running in SQS-only mode")
 
         self.session = aiohttp.ClientSession()
-        logger.info("Ready!")
+        
+        # Ensure the session is properly initialized
+        if not self.session.closed:
+            logger.info("Ready!")
+        else:
+            logger.error("Failed to initialize aiohttp session")
 
     async def on_command_error(self, interaction, error):
         print(error)
+    
+    async def close(self):
+        """Clean up resources when the bot shuts down"""
+        if hasattr(self, 'session') and not self.session.closed:
+            await self.session.close()
+        if hasattr(self, 'discord_sqs_manager'):
+            await self.discord_sqs_manager.stop_consumer()
 
     def on_error(self, *args, **kwargs):
         print(*args, kwargs)
@@ -82,6 +88,11 @@ class SCMarket(Bot):
 
     async def order_placed(self, body):
         try:
+            # Ensure session is available
+            if not hasattr(self, 'session') or self.session.closed:
+                logger.error("Discord session is not available or closed")
+                return dict(thread=None, failed=True, message="Discord session unavailable", invite_code=None)
+            
             result = await self.create_thread(
                 body.get('server_id'),
                 body.get('channel_id'),
@@ -245,14 +256,12 @@ def main():
         return
     
     bot = SCMarket(intents=intents, command_prefix="/")
-    api = create_api(bot)
     
     try:
         bot.run(Config.DISCORD_API_KEY)
     except KeyboardInterrupt:
         logger.info("Shutting down bot...")
-        if bot.discord_sqs_manager:
-            asyncio.run(bot.discord_sqs_manager.stop_consumer())
+        asyncio.run(bot.close())
 
 if __name__ == "__main__":
     main()
