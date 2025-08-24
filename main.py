@@ -70,16 +70,16 @@ class SCMarket(Bot):
     async def on_message(self, message):
         if isinstance(message.channel, discord.Thread):
             if not message.author.bot and message.content:
-                        async with self.session.post(
-                f'{Config.DISCORD_BACKEND_URL}/threads/message',
-                json=dict(
-                    author_id=str(message.author.id),
-                    name=message.author.name,
-                    thread_id=str(message.channel.id),
-                    content=message.content,
-                )
-        ) as resp:
-            await resp.read()
+                async with self.session.post(
+                    f'{Config.DISCORD_BACKEND_URL}/threads/message',
+                    json=dict(
+                        author_id=str(message.author.id),
+                        name=message.author.name,
+                        thread_id=str(message.channel.id),
+                        content=message.content,
+                    )
+                ) as resp:
+                    await resp.read()
 
     async def order_placed(self, body):
         try:
