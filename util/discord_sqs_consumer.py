@@ -274,8 +274,8 @@ class DiscordSQSManager:
         """Monitor the consumer health and log heartbeat"""
         while True:
             try:
-                await asyncio.sleep(60)  # Log every minute
-                logger.debug("Discord SQS consumer heartbeat - running normally")
+                await asyncio.sleep(300)  # Log every 5 minutes instead of every minute
+                logger.info("Discord SQS consumer heartbeat - running normally")
             except asyncio.CancelledError:
                 break
             except Exception as e:

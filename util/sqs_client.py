@@ -115,41 +115,50 @@ class SQSClient:
             return
             
         logger.info(f"Starting SQS consumer for queue: {queue_name}")
+        logger.info(f"Consumer settings: max_messages={max_messages}, wait_time={wait_time}s")
         
-        while True:
-            try:
-                # Use asyncio.to_thread to run boto3 calls in a thread pool
-                # This prevents blocking the main event loop
-                loop = asyncio.get_event_loop()
-                response = await loop.run_in_executor(
-                    None,
-                    lambda: self.sqs.receive_message(
-                        QueueUrl=queue_url,
-                        MaxNumberOfMessages=max_messages,
-                        WaitTimeSeconds=wait_time,
-                        MessageAttributeNames=['All']
+        try:
+            while True:
+                try:
+                    # Use asyncio.to_thread to run boto3 calls in a thread pool
+                    # This prevents blocking the main event loop
+                    loop = asyncio.get_event_loop()
+                    response = await loop.run_in_executor(
+                        None,
+                        lambda: self.sqs.receive_message(
+                            QueueUrl=queue_url,
+                            MaxNumberOfMessages=max_messages,
+                            WaitTimeSeconds=wait_time,
+                            MessageAttributeNames=['All']
+                        )
                     )
-                )
-                
-                messages = response.get('Messages', [])
-                if messages:
-                    logger.info(f"Received {len(messages)} messages from queue '{queue_name}'")
                     
-                    # Process messages concurrently to avoid blocking
-                    tasks = []
-                    for message in messages:
-                        task = asyncio.create_task(self._process_single_message(
-                            message, message_handler, queue_url
-                        ))
-                        tasks.append(task)
-                    
-                    # Wait for all messages to be processed
-                    if tasks:
-                        await asyncio.gather(*tasks, return_exceptions=True)
-                            
-            except Exception as e:
-                logger.error(f"Error receiving messages from queue '{queue_name}': {e}")
-                await asyncio.sleep(5)  # Wait before retrying
+                    messages = response.get('Messages', [])
+                    if messages:
+                        logger.info(f"Received {len(messages)} messages from queue '{queue_name}'")
+                        
+                        # Process messages concurrently to avoid blocking
+                        tasks = []
+                        for message in messages:
+                            task = asyncio.create_task(self._process_single_message(
+                                message, message_handler, queue_url
+                            ))
+                            tasks.append(task)
+                        
+                        # Wait for all messages to be processed
+                        if tasks:
+                            await asyncio.gather(*tasks, return_exceptions=True)
+                    # No logging for timeouts - this is normal behavior
+                                
+                except Exception as e:
+                    logger.error(f"Error receiving messages from queue '{queue_name}': {e}")
+                    await asyncio.sleep(5)  # Wait before retrying
+        except asyncio.CancelledError:
+            logger.info(f"SQS consumer for queue '{queue_name}' was cancelled")
+        except Exception as e:
+            logger.error(f"SQS consumer for queue '{queue_name}' encountered fatal error: {e}")
+        finally:
+            logger.info(f"SQS consumer for queue '{queue_name}' stopped")
     
     async def _process_single_message(self, message: Dict[str, Any], message_handler: Callable, queue_url: str):
         """Process a single SQS message"""
