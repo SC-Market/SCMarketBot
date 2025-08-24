@@ -53,20 +53,30 @@ class SCMarket(Bot):
         # SQS-only mode - no web server needed
         logger.info("Running in SQS-only mode")
 
-        self.session = aiohttp.ClientSession()
+        # Initialize aiohttp session
+        try:
+            self.session = aiohttp.ClientSession()
+            logger.info("aiohttp session initialized successfully")
+        except Exception as e:
+            logger.error(f"Failed to initialize aiohttp session: {e}")
+            self.session = None
+            logger.error("Bot initialization failed due to session error")
+            return
         
         # Ensure the session is properly initialized
-        if not self.session.closed:
+        if self.session and not self.session.closed:
             logger.info("Ready!")
         else:
             logger.error("Failed to initialize aiohttp session")
+            logger.error("Bot initialization failed due to session error")
+            return
 
     async def on_command_error(self, interaction, error):
         print(error)
     
     async def close(self):
         """Clean up resources when the bot shuts down"""
-        if hasattr(self, 'session') and not self.session.closed:
+        if hasattr(self, 'session') and self.session is not None and not self.session.closed:
             await self.session.close()
         if hasattr(self, 'discord_sqs_manager'):
             await self.discord_sqs_manager.stop_consumer()
@@ -77,21 +87,29 @@ class SCMarket(Bot):
     async def on_message(self, message):
         if isinstance(message.channel, discord.Thread):
             if not message.author.bot and message.content:
-                async with self.session.post(
-                    f'{Config.DISCORD_BACKEND_URL}/threads/message',
-                    json=dict(
-                        author_id=str(message.author.id),
-                        name=message.author.name,
-                        thread_id=str(message.channel.id),
-                        content=message.content,
-                    )
-                ) as resp:
-                    await resp.read()
+                # Check if session is available
+                if not hasattr(self, 'session') or self.session is None or self.session.closed:
+                    logger.error("Cannot send message: aiohttp session not available")
+                    return
+                
+                try:
+                    async with self.session.post(
+                        f'{Config.DISCORD_BACKEND_URL}/threads/message',
+                        json=dict(
+                            author_id=str(message.author.id),
+                            name=message.author.name,
+                            thread_id=str(message.channel.id),
+                            content=message.content,
+                        )
+                    ) as resp:
+                        await resp.read()
+                except Exception as e:
+                    logger.error(f"Failed to send message to backend: {e}")
 
     async def order_placed(self, body):
         try:
             # Ensure session is available
-            if not hasattr(self, 'session') or self.session.closed:
+            if not hasattr(self, 'session') or self.session is None or self.session.closed:
                 logger.error("Discord session is not available or closed")
                 return dict(thread=None, failed=True, message="Discord session unavailable", invite_code=None)
             

@@ -20,6 +20,11 @@ class DiscordSQSMessage:
         self.entity_type = self.metadata.get('entity_type')
         self.created_at = self.metadata.get('created_at')
         self.retry_count = self.metadata.get('retry_count', 0)
+        
+        # Extract entity info for easier access
+        self.entity_info = self.payload.get('entity_info', {})
+        self.entity_id = self.entity_info.get('id')
+        self.entity_type_from_payload = self.entity_info.get('type')
 
 class DiscordSQSResponse:
     """Represents a response to send back to the backend"""
@@ -90,7 +95,11 @@ class DiscordSQSConsumer:
             order = payload.get('order', {})
             customer_discord_id = payload.get('customer_discord_id')
             
-            logger.info(f"Extracted fields: server_id={server_id}, channel_id={channel_id}, members={members}")
+            # Extract entity info for better correlation
+            entity_type = message.entity_type_from_payload or message.entity_type
+            entity_id = message.entity_id
+            
+            logger.info(f"Extracted fields: server_id={server_id}, channel_id={channel_id}, members={members}, entity_type={entity_type}, entity_id={entity_id}")
             
             # Validate required fields
             if not all([server_id, channel_id, members]):
@@ -121,7 +130,9 @@ class DiscordSQSConsumer:
                     },
                     {
                         'discord_message_id': None,  # TODO: Add if we send a welcome message
-                        'original_order_id': message.order_id
+                        'original_order_id': message.order_id,
+                        'entity_type': entity_type,  # Include entity_type for backend correlation
+                        'entity_id': entity_id  # Include entity_id for backend correlation
                     }
                 )
                 
@@ -162,6 +173,10 @@ class DiscordSQSConsumer:
     async def _send_error_response(self, original_message: DiscordSQSMessage, error_message: str) -> bool:
         """Send an error response to the backend queue"""
         try:
+            # Extract entity info from the original message for better correlation
+            entity_type = original_message.entity_type_from_payload or original_message.entity_type
+            entity_id = original_message.entity_id
+            
             response = DiscordSQSResponse(
                 'error',
                 {
@@ -170,7 +185,9 @@ class DiscordSQSConsumer:
                 },
                 {
                     'original_order_id': original_message.order_id,
-                    'original_type': original_message.type
+                    'original_type': original_message.type,
+                    'entity_type': entity_type,  # Include entity_type for backend correlation
+                    'entity_id': entity_id  # Include entity_id for backend correlation
                 }
             )
             
