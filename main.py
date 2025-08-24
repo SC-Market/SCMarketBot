@@ -16,7 +16,6 @@ from cogs.stock import stock
 from util.api_server import create_api
 from util.config import Config
 from util.result import Result
-from util.sqs_manager import SQSManager
 from util.discord_sqs_consumer import DiscordSQSManager
 
 intents = discord.Intents.default()
