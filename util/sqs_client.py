@@ -85,10 +85,15 @@ class SQSClient:
                             'DataType': 'Number'
                         }
             
-            response = self.sqs.send_message(
-                QueueUrl=queue_url,
-                MessageBody=json.dumps(message_body),
-                MessageAttributes=message_attrs
+            # Use thread pool to avoid blocking the event loop
+            loop = asyncio.get_event_loop()
+            response = await loop.run_in_executor(
+                None,
+                lambda: self.sqs.send_message(
+                    QueueUrl=queue_url,
+                    MessageBody=json.dumps(message_body),
+                    MessageAttributes=message_attrs
+                )
             )
             
             logger.info(f"Message sent to queue '{queue_name}' with ID: {response['MessageId']}")
@@ -113,40 +118,61 @@ class SQSClient:
         
         while True:
             try:
-                # Receive messages from the queue
-                response = self.sqs.receive_message(
-                    QueueUrl=queue_url,
-                    MaxNumberOfMessages=max_messages,
-                    WaitTimeSeconds=wait_time,
-                    MessageAttributeNames=['All']
+                # Use asyncio.to_thread to run boto3 calls in a thread pool
+                # This prevents blocking the main event loop
+                loop = asyncio.get_event_loop()
+                response = await loop.run_in_executor(
+                    None,
+                    lambda: self.sqs.receive_message(
+                        QueueUrl=queue_url,
+                        MaxNumberOfMessages=max_messages,
+                        WaitTimeSeconds=wait_time,
+                        MessageAttributeNames=['All']
+                    )
                 )
                 
                 messages = response.get('Messages', [])
                 if messages:
                     logger.info(f"Received {len(messages)} messages from queue '{queue_name}'")
                     
+                    # Process messages concurrently to avoid blocking
+                    tasks = []
                     for message in messages:
-                        try:
-                            # Parse message body
-                            body = json.loads(message['Body'])
-                            
-                            # Process message asynchronously
-                            await message_handler(body, message)
-                            
-                            # Delete message after successful processing
-                            self.sqs.delete_message(
-                                QueueUrl=queue_url,
-                                ReceiptHandle=message['ReceiptHandle']
-                            )
-                            
-                        except Exception as e:
-                            logger.error(f"Error processing message {message['MessageId']}: {e}")
-                            # Don't delete the message so it can be retried
-                            continue
+                        task = asyncio.create_task(self._process_single_message(
+                            message, message_handler, queue_url
+                        ))
+                        tasks.append(task)
+                    
+                    # Wait for all messages to be processed
+                    if tasks:
+                        await asyncio.gather(*tasks, return_exceptions=True)
                             
             except Exception as e:
                 logger.error(f"Error receiving messages from queue '{queue_name}': {e}")
                 await asyncio.sleep(5)  # Wait before retrying
+    
+    async def _process_single_message(self, message: Dict[str, Any], message_handler: Callable, queue_url: str):
+        """Process a single SQS message"""
+        try:
+            # Parse message body
+            body = json.loads(message['Body'])
+            
+            # Process message asynchronously
+            await message_handler(body, message)
+            
+            # Delete message after successful processing using thread pool
+            loop = asyncio.get_event_loop()
+            await loop.run_in_executor(
+                None,
+                lambda: self.sqs.delete_message(
+                    QueueUrl=queue_url,
+                    ReceiptHandle=message['ReceiptHandle']
+                )
+            )
+            
+        except Exception as e:
+            logger.error(f"Error processing message {message['MessageId']}: {e}")
+            # Don't delete the message so it can be retried
     
     async def send_order_placed(self, order_data: Dict[str, Any]) -> bool:
         """Send order placed event to SQS"""

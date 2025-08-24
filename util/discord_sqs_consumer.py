@@ -1,6 +1,7 @@
 import asyncio
 import json
 import logging
+import traceback
 from typing import Dict, Any, Optional
 from datetime import datetime
 
@@ -52,11 +53,13 @@ class DiscordSQSConsumer:
     async def process_message(self, message_body: Dict[str, Any], raw_message: Dict[str, Any]) -> bool:
         """Process an incoming Discord queue message"""
         try:
+            logger.info(f"Raw message body: {message_body}")
             discord_message = DiscordSQSMessage(message_body)
             logger.info(f"Processing {discord_message.type} message for order {discord_message.order_id}")
             
             if discord_message.type in self.message_handlers:
                 handler = self.message_handlers[discord_message.type]
+                logger.info(f"Calling handler for {discord_message.type}")
                 result = await handler(discord_message)
                 
                 if result:
@@ -71,12 +74,14 @@ class DiscordSQSConsumer:
                 
         except Exception as e:
             logger.error(f"Error processing Discord queue message: {e}")
+            logger.error(f"Traceback: {traceback.format_exc()}")
             return False
     
     async def _handle_create_thread(self, message: DiscordSQSMessage) -> bool:
         """Handle create_thread message type"""
         try:
             payload = message.payload
+            logger.info(f"Processing create_thread payload: {payload}")
             
             # Extract required fields
             server_id = payload.get('server_id')
@@ -85,6 +90,8 @@ class DiscordSQSConsumer:
             order = payload.get('order', {})
             customer_discord_id = payload.get('customer_discord_id')
             
+            logger.info(f"Extracted fields: server_id={server_id}, channel_id={channel_id}, members={members}")
+            
             # Validate required fields
             if not all([server_id, channel_id, members]):
                 logger.error(f"Missing required fields for create_thread: server_id={server_id}, channel_id={channel_id}, members={members}")
@@ -92,6 +99,7 @@ class DiscordSQSConsumer:
                 return False
             
             # Create the thread using existing bot method
+            logger.info(f"Calling bot.order_placed with data: {{'server_id': {server_id}, 'channel_id': {channel_id}, 'members': {members}, 'order': {order}, 'customer_discord_id': {customer_discord_id}}}")
             result = await self.bot.order_placed({
                 'server_id': server_id,
                 'channel_id': channel_id,
@@ -99,6 +107,8 @@ class DiscordSQSConsumer:
                 'order': order,
                 'customer_discord_id': customer_discord_id
             })
+            
+            logger.info(f"Thread creation result: {result}")
             
             if result and not result.get('failed'):
                 # Send success response
@@ -207,19 +217,53 @@ class DiscordSQSManager:
             # Extract queue name from URL
             queue_name = Config.DISCORD_QUEUE_URL.split('/')[-1]
             
+            # Start consumer with timeout protection
             self.consumer_task = asyncio.create_task(
-                self.sqs_client.start_consumer(
-                    queue_name,
-                    self.consumer.process_message,
-                    Config.SQS_CONSUMER_SETTINGS['max_messages'],
-                    Config.SQS_CONSUMER_SETTINGS['wait_time']
-                )
+                self._run_consumer_with_timeout(queue_name)
             )
             
             logger.info(f"Started Discord SQS consumer for queue: {queue_name}")
             
         except Exception as e:
             logger.error(f"Failed to start Discord SQS consumer: {e}")
+    
+    async def _run_consumer_with_timeout(self, queue_name: str):
+        """Run the consumer with timeout protection to prevent blocking"""
+        try:
+            # Start a heartbeat task to monitor the consumer
+            heartbeat_task = asyncio.create_task(self._heartbeat_monitor())
+            
+            await asyncio.wait_for(
+                self.sqs_client.start_consumer(
+                    queue_name,
+                    self.consumer.process_message,
+                    Config.SQS_CONSUMER_SETTINGS['max_messages'],
+                    Config.SQS_CONSUMER_SETTINGS['wait_time']
+                ),
+                timeout=300  # 5 minute timeout as a safety measure
+            )
+        except asyncio.TimeoutError:
+            logger.warning("SQS consumer timed out, restarting...")
+            # Restart the consumer if it times out
+            await asyncio.sleep(1)
+            await self.start_consumer()
+        except Exception as e:
+            logger.error(f"SQS consumer error: {e}")
+            # Restart the consumer on error
+            await asyncio.sleep(5)
+            await self.start_consumer()
+    
+    async def _heartbeat_monitor(self):
+        """Monitor the consumer health and log heartbeat"""
+        while True:
+            try:
+                await asyncio.sleep(60)  # Log every minute
+                logger.debug("Discord SQS consumer heartbeat - running normally")
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                logger.error(f"Heartbeat monitor error: {e}")
+                break
     
     async def stop_consumer(self):
         """Stop the Discord SQS consumer"""

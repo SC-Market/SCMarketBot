@@ -43,8 +43,9 @@ class SCMarket(Bot):
         if Config.ENABLE_SQS:
             self.discord_sqs_manager = DiscordSQSManager(self)
             if await self.discord_sqs_manager.initialize():
-                await self.discord_sqs_manager.start_consumer()
-                logger.info("Discord SQS consumer started successfully")
+                # Start consumer in background to avoid blocking main thread
+                asyncio.create_task(self.discord_sqs_manager.start_consumer())
+                logger.info("Discord SQS consumer started successfully in background")
             else:
                 logger.error("Failed to initialize Discord SQS manager")
 
@@ -93,11 +94,21 @@ class SCMarket(Bot):
                 logger.error("Discord session is not available or closed")
                 return dict(thread=None, failed=True, message="Discord session unavailable", invite_code=None)
             
+            # Convert string IDs to integers and handle data types
+            server_id = int(body.get('server_id')) if body.get('server_id') else None
+            channel_id = int(body.get('channel_id')) if body.get('channel_id') else None
+            members = [int(member) for member in body.get('members', []) if member]
+            
+            # Use order as offer (they have similar structure)
+            offer = body.get('order', {})
+            
+            logger.info(f"Creating thread: server_id={server_id}, channel_id={channel_id}, members={members}")
+            
             result = await self.create_thread(
-                body.get('server_id'),
-                body.get('channel_id'),
-                body.get('members'),
-                body.get('order'),
+                server_id,
+                channel_id,
+                members,
+                offer,
             )
 
             thread = result.value
