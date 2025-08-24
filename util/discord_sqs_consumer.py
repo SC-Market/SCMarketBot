@@ -25,6 +25,15 @@ class DiscordSQSMessage:
         self.entity_info = self.payload.get('entity_info', {})
         self.entity_id = self.entity_info.get('id')
         self.entity_type_from_payload = self.entity_info.get('type')
+        
+        # CRITICAL: Log the extracted IDs for debugging
+        logger.info(f"DiscordSQSMessage initialized: type={self.type}, order_id={self.order_id}, entity_id={self.entity_id}, entity_type={self.entity_type}")
+        
+        # Validate that we have the necessary ID for correlation
+        if not self.entity_id and not self.order_id:
+            logger.warning(f"Message missing both entity_id and order_id - correlation may fail: {message_data}")
+        elif self.entity_id and self.order_id and self.entity_id != self.order_id:
+            logger.warning(f"Message has different entity_id ({self.entity_id}) and order_id ({self.order_id}) - using entity_id for correlation")
 
 class DiscordSQSResponse:
     """Represents a response to send back to the backend"""
@@ -99,7 +108,12 @@ class DiscordSQSConsumer:
             entity_type = message.entity_type_from_payload or message.entity_type
             entity_id = message.entity_id
             
+            # CRITICAL FIX: Use the most reliable source for the business entity ID
+            # Priority: entity_id from payload > order_id from metadata > fallback
+            business_entity_id = entity_id or message.order_id or "unknown"
+            
             logger.info(f"Extracted fields: server_id={server_id}, channel_id={channel_id}, members={members}, entity_type={entity_type}, entity_id={entity_id}")
+            logger.info(f"Business entity ID for correlation: {business_entity_id} (from entity_id: {entity_id}, metadata order_id: {message.order_id})")
             
             # Validate required fields
             if not all([server_id, channel_id, members]):
@@ -120,24 +134,30 @@ class DiscordSQSConsumer:
             logger.info(f"Thread creation result: {result}")
             
             if result and not result.get('failed'):
+                # Get the newly created thread ID
+                new_thread_id = result.get('thread', {}).get('thread_id')
+                
+                # CRITICAL FIX: Ensure we're sending the business entity ID, not the thread ID
+                logger.info(f"Sending response: thread_id={new_thread_id}, original_order_id={business_entity_id}")
+                
                 # Send success response
                 response = DiscordSQSResponse(
                     'thread_created',
                     {
-                        'thread_id': result.get('thread', {}).get('thread_id'),
+                        'thread_id': new_thread_id,
                         'invite_code': result.get('invite_code'),
                         'success': True
                     },
                     {
                         'discord_message_id': None,  # TODO: Add if we send a welcome message
-                        'original_order_id': message.order_id,
+                        'original_order_id': business_entity_id,  # ← FIXED: Use business entity ID, not thread ID
                         'entity_type': entity_type,  # Include entity_type for backend correlation
                         'entity_id': entity_id  # Include entity_id for backend correlation
                     }
                 )
                 
                 await self._send_response(response)
-                logger.info(f"Thread created successfully: {result.get('thread', {}).get('thread_id')}")
+                logger.info(f"Thread created successfully: {new_thread_id}")
                 return True
             else:
                 # Send error response
@@ -177,6 +197,11 @@ class DiscordSQSConsumer:
             entity_type = original_message.entity_type_from_payload or original_message.entity_type
             entity_id = original_message.entity_id
             
+            # CRITICAL FIX: Use the most reliable source for the business entity ID
+            business_entity_id = entity_id or original_message.order_id or "unknown"
+            
+            logger.info(f"Sending error response: original_order_id={business_entity_id}, error={error_message}")
+            
             response = DiscordSQSResponse(
                 'error',
                 {
@@ -184,7 +209,7 @@ class DiscordSQSConsumer:
                     'success': False
                 },
                 {
-                    'original_order_id': original_message.order_id,
+                    'original_order_id': business_entity_id,  # ← FIXED: Use business entity ID, not potentially corrupted order_id
                     'original_type': original_message.type,
                     'entity_type': entity_type,  # Include entity_type for backend correlation
                     'entity_id': entity_id  # Include entity_id for backend correlation
