@@ -6,6 +6,7 @@ from typing import Dict, Any, Optional, Callable
 
 import boto3
 from botocore.exceptions import ClientError, NoCredentialsError
+import traceback
 
 logger = logging.getLogger('SCMarketBot.SQS')
 
@@ -162,25 +163,56 @@ class SQSClient:
     
     async def _process_single_message(self, message: Dict[str, Any], message_handler: Callable, queue_url: str):
         """Process a single SQS message"""
+        message_id = message.get('MessageId', 'unknown')
+        receipt_handle = message.get('ReceiptHandle', 'unknown')
+        
+        logger.info(f"Processing SQS message {message_id}")
+        logger.debug(f"Message details: {message}")
+        
         try:
             # Parse message body
-            body = json.loads(message['Body'])
+            try:
+                body = json.loads(message['Body'])
+                logger.debug(f"Parsed message body: {body}")
+            except json.JSONDecodeError as e:
+                logger.error(f"Failed to parse JSON for message {message_id}: {e}")
+                logger.error(f"Raw message body: {message.get('Body', 'No body')}")
+                # Don't delete the message so it can be retried
+                return
             
             # Process message asynchronously
-            await message_handler(body, message)
+            start_time = asyncio.get_event_loop().time()
+            result = await message_handler(body, message)
+            processing_time = asyncio.get_event_loop().time() - start_time
             
-            # Delete message after successful processing using thread pool
-            loop = asyncio.get_event_loop()
-            await loop.run_in_executor(
-                None,
-                lambda: self.sqs.delete_message(
-                    QueueUrl=queue_url,
-                    ReceiptHandle=message['ReceiptHandle']
-                )
-            )
-            
+            if result:
+                logger.info(f"Successfully processed message {message_id} in {processing_time:.2f}s")
+                
+                # Delete message after successful processing using thread pool
+                try:
+                    loop = asyncio.get_event_loop()
+                    await loop.run_in_executor(
+                        None,
+                        lambda: self.sqs.delete_message(
+                            QueueUrl=queue_url,
+                            ReceiptHandle=receipt_handle
+                        )
+                    )
+                    logger.debug(f"Deleted message {message_id} from queue")
+                except Exception as e:
+                    logger.error(f"Failed to delete message {message_id} from queue: {e}")
+                    logger.error(f"Error type: {type(e).__name__}")
+                    # This is a critical error - we don't want to reprocess the message
+                    logger.error(f"Full traceback: {traceback.format_exc()}")
+            else:
+                logger.error(f"Message handler returned False for message {message_id} in {processing_time:.2f}s")
+                # Don't delete the message so it can be retried
+                
         except Exception as e:
-            logger.error(f"Error processing message {message['MessageId']}: {e}")
+            logger.error(f"Error processing message {message_id}: {e}")
+            logger.error(f"Error type: {type(e).__name__}")
+            logger.error(f"Message: {message}")
+            logger.error(f"Full traceback: {traceback.format_exc()}")
             # Don't delete the message so it can be retried
     
     async def send_order_placed(self, order_data: Dict[str, Any]) -> bool:

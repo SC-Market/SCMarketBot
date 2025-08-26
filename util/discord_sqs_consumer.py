@@ -66,29 +66,49 @@ class DiscordSQSConsumer:
     
     async def process_message(self, message_body: Dict[str, Any], raw_message: Dict[str, Any]) -> bool:
         """Process an incoming Discord queue message"""
+        message_id = raw_message.get('MessageId', 'unknown')
+        receipt_handle = raw_message.get('ReceiptHandle', 'unknown')
+        
+        logger.info(f"Processing message {message_id} from Discord queue")
+        logger.debug(f"Raw message: {raw_message}")
+        logger.debug(f"Message body: {message_body}")
+        
         try:
-            logger.info(f"Raw message body: {message_body}")
             discord_message = DiscordSQSMessage(message_body)
             logger.info(f"Processing {discord_message.type} message for order {discord_message.order_id}")
             
             if discord_message.type in self.message_handlers:
                 handler = self.message_handlers[discord_message.type]
-                logger.info(f"Calling handler for {discord_message.type}")
+                logger.debug(f"Calling handler for {discord_message.type}")
+                
+                start_time = asyncio.get_event_loop().time()
                 result = await handler(discord_message)
+                processing_time = asyncio.get_event_loop().time() - start_time
                 
                 if result:
-                    logger.info(f"Successfully processed {discord_message.type} message")
+                    logger.info(f"Successfully processed {discord_message.type} message in {processing_time:.2f}s")
                 else:
-                    logger.error(f"Failed to process {discord_message.type} message")
+                    logger.error(f"Failed to process {discord_message.type} message in {processing_time:.2f}s")
                 
                 return result
             else:
-                logger.warning(f"Unknown message type: {discord_message.type}")
+                logger.warning(f"Unknown message type: {discord_message.type} - this may be a configuration issue")
+                logger.debug(f"Available handlers: {list(self.message_handlers.keys())}")
                 return False
                 
+        except json.JSONDecodeError as e:
+            logger.error(f"JSON decode error processing message {message_id}: {e}")
+            logger.error(f"Message body that failed to decode: {message_body}")
+            return False
+        except KeyError as e:
+            logger.error(f"Missing required field in message {message_id}: {e}")
+            logger.error(f"Message body: {message_body}")
+            return False
         except Exception as e:
-            logger.error(f"Error processing Discord queue message: {e}")
-            logger.error(f"Traceback: {traceback.format_exc()}")
+            logger.error(f"Unexpected error processing Discord queue message {message_id}: {e}")
+            logger.error(f"Error type: {type(e).__name__}")
+            logger.error(f"Message body: {message_body}")
+            logger.error(f"Full traceback: {traceback.format_exc()}")
             return False
     
     async def _handle_create_thread(self, message: DiscordSQSMessage) -> bool:
@@ -117,12 +137,29 @@ class DiscordSQSConsumer:
             
             # Validate required fields
             if not all([server_id, channel_id, members]):
-                logger.error(f"Missing required fields for create_thread: server_id={server_id}, channel_id={channel_id}, members={members}")
-                await self._send_error_response(message, "Missing required fields")
+                error_msg = f"Missing required fields for create_thread: server_id={server_id}, channel_id={channel_id}, members={members}"
+                logger.error(error_msg)
+                logger.error(f"Payload: {payload}")
+                await self._send_error_response(message, error_msg)
+                return False
+            
+            # Validate data types
+            try:
+                # Test if IDs can be converted to integers
+                int(server_id)
+                int(channel_id)
+                [int(member) for member in members if member]
+            except (ValueError, TypeError) as e:
+                error_msg = f"Invalid ID format in create_thread: {e}"
+                logger.error(error_msg)
+                logger.error(f"Raw values: server_id={server_id}, channel_id={channel_id}, members={members}")
+                await self._send_error_response(message, error_msg)
                 return False
             
             # Create the thread using existing bot method
             logger.info(f"Calling bot.order_placed with data: {{'server_id': {server_id}, 'channel_id': {channel_id}, 'members': {members}, 'order': {order}, 'customer_discord_id': {customer_discord_id}}}")
+            
+            start_time = asyncio.get_event_loop().time()
             result = await self.bot.order_placed({
                 'server_id': server_id,
                 'channel_id': channel_id,
@@ -130,8 +167,9 @@ class DiscordSQSConsumer:
                 'order': order,
                 'customer_discord_id': customer_discord_id
             })
+            processing_time = asyncio.get_event_loop().time() - start_time
             
-            logger.info(f"Thread creation result: {result}")
+            logger.info(f"Thread creation result: {result} (took {processing_time:.2f}s)")
             
             if result and not result.get('failed'):
                 # Get the newly created thread ID
@@ -162,12 +200,16 @@ class DiscordSQSConsumer:
             else:
                 # Send error response
                 error_msg = result.get('message', 'Unknown error') if result else 'No result returned'
-                await self._send_error_response(message, error_msg)
                 logger.error(f"Thread creation failed: {error_msg}")
+                logger.error(f"Full result: {result}")
+                await self._send_error_response(message, error_msg)
                 return False
                 
         except Exception as e:
-            logger.error(f"Error handling create_thread: {e}")
+            logger.error(f"Unexpected error handling create_thread: {e}")
+            logger.error(f"Error type: {type(e).__name__}")
+            logger.error(f"Message: {message}")
+            logger.error(f"Full traceback: {traceback.format_exc()}")
             await self._send_error_response(message, str(e))
             return False
     
