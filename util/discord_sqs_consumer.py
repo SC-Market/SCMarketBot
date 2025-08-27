@@ -272,6 +272,10 @@ class DiscordSQSManager:
         self.sqs_client = None
         self.consumer = None
         self.consumer_task = None
+        self.health_task = None
+        self.restart_count = 0
+        self.last_restart_time = 0
+        self.consumer_start_time = 0
         
     async def initialize(self):
         """Initialize SQS client and consumer"""
@@ -301,56 +305,164 @@ class DiscordSQSManager:
             # Extract queue name from URL
             queue_name = Config.DISCORD_QUEUE_URL.split('/')[-1]
             
-            # Start consumer with timeout protection
+            # Start consumer with enhanced monitoring
             self.consumer_task = asyncio.create_task(
-                self._run_consumer_with_timeout(queue_name)
+                self._run_consumer_with_monitoring(queue_name)
             )
             
+            # Start health monitoring
+            self.health_task = asyncio.create_task(self._comprehensive_health_monitor(queue_name))
+            
+            self.consumer_start_time = asyncio.get_event_loop().time()
             logger.info(f"Started Discord SQS consumer for queue: {queue_name}")
             
         except Exception as e:
             logger.error(f"Failed to start Discord SQS consumer: {e}")
     
-    async def _run_consumer_with_timeout(self, queue_name: str):
-        """Run the consumer with timeout protection to prevent blocking"""
+    async def _run_consumer_with_monitoring(self, queue_name: str):
+        """Run the consumer with comprehensive monitoring and automatic restart"""
         try:
-            # Start a heartbeat task to monitor the consumer
-            heartbeat_task = asyncio.create_task(self._heartbeat_monitor())
+            logger.info(f"Starting consumer for queue: {queue_name}")
             
-            await asyncio.wait_for(
-                self.sqs_client.start_consumer(
-                    queue_name,
-                    self.consumer.process_message,
-                    Config.SQS_CONSUMER_SETTINGS['max_messages'],
-                    Config.SQS_CONSUMER_SETTINGS['wait_time']
-                ),
-                timeout=300  # 5 minute timeout as a safety measure
+            await self.sqs_client.start_consumer(
+                queue_name,
+                self.consumer.process_message,
+                Config.SQS_CONSUMER_SETTINGS['max_messages'],
+                Config.SQS_CONSUMER_SETTINGS['wait_time']
             )
-        except asyncio.TimeoutError:
-            logger.warning("SQS consumer timed out, restarting...")
-            # Restart the consumer if it times out
-            await asyncio.sleep(1)
-            await self.start_consumer()
+            
+        except asyncio.CancelledError:
+            logger.info(f"Consumer for queue {queue_name} was cancelled")
+            raise
         except Exception as e:
-            logger.error(f"SQS consumer error: {e}")
-            # Restart the consumer on error
-            await asyncio.sleep(5)
-            await self.start_consumer()
+            logger.error(f"Consumer for queue {queue_name} encountered fatal error: {e}")
+            logger.error(f"Error type: {type(e).__name__}")
+            logger.error(f"Full traceback: {traceback.format_exc()}")
+            
+            # Attempt automatic restart
+            await self._attempt_restart(queue_name, str(e))
     
-    async def _heartbeat_monitor(self):
-        """Monitor the consumer health and log heartbeat"""
+    async def _attempt_restart(self, queue_name: str, error_reason: str):
+        """Attempt to restart the consumer with backoff"""
+        current_time = asyncio.get_event_loop().time()
+        time_since_last_restart = current_time - self.last_restart_time
+        
+        # Implement exponential backoff
+        if self.restart_count < 5:
+            wait_time = min(30 * (2 ** self.restart_count), 300)  # Max 5 minutes
+        else:
+            wait_time = 300  # 5 minutes for subsequent restarts
+        
+        if time_since_last_restart < wait_time:
+            logger.warning(f"Consumer restart attempted too soon. Waiting {wait_time - time_since_last_restart:.1f}s")
+            await asyncio.sleep(wait_time - time_since_last_restart)
+        
+        self.restart_count += 1
+        self.last_restart_time = current_time
+        
+        logger.warning(f"Attempting to restart consumer for queue {queue_name} (attempt {self.restart_count})")
+        logger.warning(f"Previous error: {error_reason}")
+        
+        try:
+            # Stop current consumer
+            await self.stop_consumer()
+            
+            # Wait before restart
+            await asyncio.sleep(5)
+            
+            # Restart consumer
+            await self.start_consumer()
+            
+            logger.info(f"Successfully restarted consumer for queue {queue_name}")
+            
+        except Exception as e:
+            logger.error(f"Failed to restart consumer for queue {queue_name}: {e}")
+            
+            # If restart fails, try again after a longer delay
+            if self.restart_count < 10:
+                logger.info(f"Scheduling another restart attempt in 60 seconds")
+                await asyncio.sleep(60)
+                await self._attempt_restart(queue_name, f"Restart failed: {e}")
+            else:
+                logger.error(f"Maximum restart attempts reached for queue {queue_name}. Manual intervention required.")
+    
+    async def _comprehensive_health_monitor(self, queue_name: str):
+        """Comprehensive health monitoring for the consumer"""
         while True:
             try:
-                await asyncio.sleep(300)  # Log every 5 minutes instead of every minute
-                logger.info("Discord SQS consumer heartbeat - running normally")
+                await asyncio.sleep(30)  # Check every 30 seconds
+                
+                current_time = asyncio.get_event_loop().time()
+                uptime = current_time - self.consumer_start_time
+                
+                # Check consumer task status
+                consumer_healthy = (
+                    self.consumer_task and 
+                    not self.consumer_task.done() and 
+                    not self.consumer_task.cancelled()
+                )
+                
+                # Get SQS client health
+                sqs_health = self.sqs_client.get_health_status() if self.sqs_client else {}
+                
+                # Get queue attributes
+                queue_attributes = await self.sqs_client.get_queue_attributes(queue_name) if self.sqs_client else {}
+                
+                # Log comprehensive health status
+                logger.info(f"Consumer health check - Queue: {queue_name}")
+                logger.info(f"  Consumer task: {'Healthy' if consumer_healthy else 'Unhealthy'}")
+                logger.info(f"  Uptime: {uptime:.1f}s")
+                logger.info(f"  Restart count: {self.restart_count}")
+                logger.info(f"  Last restart: {self.last_restart_time:.1f}s ago")
+                
+                if sqs_health:
+                    logger.info(f"  SQS client: {sqs_health.get('client_initialized', False)}")
+                    logger.info(f"  Last message: {sqs_health.get('time_since_last_message', 0):.1f}s ago")
+                    logger.info(f"  Total messages: {sqs_health.get('message_count', 0)}")
+                    logger.info(f"  Error count: {sqs_health.get('error_count', 0)}")
+                
+                if queue_attributes:
+                    depth = int(queue_attributes.get('ApproximateNumberOfMessages', 0))
+                    in_flight = int(queue_attributes.get('ApproximateNumberOfMessagesNotVisible', 0))
+                    logger.info(f"  Queue depth: {depth}, In flight: {in_flight}")
+                
+                # Check for unhealthy conditions
+                if not consumer_healthy:
+                    logger.error(f"Consumer task is unhealthy for queue {queue_name}")
+                    await self._attempt_restart(queue_name, "Consumer task unhealthy")
+                
+                # Check for long periods without messages
+                if sqs_health and sqs_health.get('time_since_last_message', 0) > 900:  # 15 minutes
+                    logger.warning(f"Queue {queue_name} has not received messages for {sqs_health['time_since_last_message']:.1f} seconds")
+                
+                # Check for high error rates
+                if sqs_health and sqs_health.get('error_count', 0) > 10:
+                    logger.warning(f"Queue {queue_name} has high error count: {sqs_health['error_count']}")
+                
+                # Check for high queue depth
+                if queue_attributes and int(queue_attributes.get('ApproximateNumberOfMessages', 0)) > 100:
+                    logger.warning(f"Queue {queue_name} has high depth: {queue_attributes['ApproximateNumberOfMessages']} messages")
+                
             except asyncio.CancelledError:
                 break
             except Exception as e:
-                logger.error(f"Heartbeat monitor error: {e}")
-                break
+                logger.error(f"Health monitor error: {e}")
+                await asyncio.sleep(30)  # Wait before retrying
     
     async def stop_consumer(self):
         """Stop the Discord SQS consumer"""
+        logger.info("Stopping Discord SQS consumer...")
+        
+        # Cancel health monitoring
+        if self.health_task and not self.health_task.done():
+            self.health_task.cancel()
+            try:
+                await self.health_task
+            except asyncio.CancelledError:
+                pass
+            self.health_task = None
+        
+        # Cancel consumer task
         if self.consumer_task and not self.consumer_task.done():
             self.consumer_task.cancel()
             try:
@@ -360,3 +472,26 @@ class DiscordSQSManager:
         
         self.consumer_task = None
         logger.info("Stopped Discord SQS consumer")
+    
+    def get_health_status(self) -> Dict[str, Any]:
+        """Get comprehensive health status of the SQS manager"""
+        current_time = asyncio.get_event_loop().time()
+        
+        return {
+            'consumer_initialized': self.consumer is not None,
+            'sqs_client_initialized': self.sqs_client is not None,
+            'consumer_task_running': (
+                self.consumer_task and 
+                not self.consumer_task.done() and 
+                not self.consumer_task.cancelled()
+            ),
+            'health_task_running': (
+                self.health_task and 
+                not self.health_task.done() and 
+                not self.health_task.cancelled()
+            ),
+            'uptime': current_time - self.consumer_start_time if self.consumer_start_time else 0,
+            'restart_count': self.restart_count,
+            'last_restart': self.last_restart_time,
+            'sqs_health': self.sqs_client.get_health_status() if self.sqs_client else None
+        }

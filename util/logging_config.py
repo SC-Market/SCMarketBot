@@ -179,3 +179,4 @@ class LoggingConfig:
         except ImportError:
             # Fallback to regular handlers if rotating handlers not available
             return None, None, None
+
