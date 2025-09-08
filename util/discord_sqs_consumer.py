@@ -183,7 +183,6 @@ class DiscordSQSConsumer:
                     'thread_created',
                     {
                         'thread_id': new_thread_id,
-                        'invite_code': result.get('invite_code'),
                         'success': True
                     },
                     {

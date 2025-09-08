@@ -201,34 +201,15 @@ class SCMarket(Bot):
             thread = result.value
             logger.info(f"Thread creation result: {result}")
 
-            # Handle invite creation
-            invite = None
-            if body.get('server_id') and body.get('channel_id'):
-                try:
-                    invite = await self.verify_invite(
-                        body.get('customer_discord_id'),
-                        body.get('server_id'),
-                        body.get('channel_id'),
-                        body.get("discord_invite")
-                    )
-                    logger.info(f"Invite verification result: {invite}")
-                except Exception as e:
-                    logger.error(f"Failed to verify/create invite: {e}")
-                    logger.error(f"Invite details: customer_id={body.get('customer_discord_id')}, server_id={body.get('server_id')}, channel_id={body.get('channel_id')}")
-                    logger.error(f"Full traceback: {traceback.format_exc()}")
-            else:
-                logger.info("Skipping invite creation - missing server_id or channel_id")
-
+            # Invite creation is now handled by the backend
+            # We just return the thread creation result
             if not thread:
-                thread = dict(thread_id=None,
-                              invite_code=str(invite) if invite else None)
-
                 logger.error(f"Thread creation failed: {result.error}")
                 logger.error(f"Result object: {result}")
             else:
                 logger.info(f"Thread created successfully: {thread}")
                 
-            return dict(thread=thread, failed=bool(result.error), message=result.error, invite_code=invite)
+            return dict(thread=thread, failed=bool(result.error), message=result.error, invite_code=None)
             
         except Exception as e:
             logger.error(f"Unexpected error in order_placed: {e}")
@@ -238,75 +219,16 @@ class SCMarket(Bot):
             return dict(thread=None, failed=True, message=f"An unexpected error occurred: {e}", invite_code=None)
 
     async def verify_invite(self, customer_id, server_id, channel_id, invite_code):
-        """Enhanced invite verification with comprehensive logging"""
+        """Verify if an existing invite is valid (no creation - handled by backend)"""
         logger.info(f"Verifying invite: customer_id={customer_id}, server_id={server_id}, channel_id={channel_id}, invite_code={invite_code}")
         
-        try:
-            guild: discord.Guild = await self.fetch_guild(int(server_id))
-            if not guild:
-                logger.debug(f"Guild not found for server_id: {server_id} - this may be a configuration issue")
-                return None
-
-            channel: discord.TextChannel = guild.get_channel(int(channel_id))
-            if not channel:
-                logger.debug(f"Channel not found for channel_id: {channel_id} in guild: {guild.name} - this may be a configuration issue")
-                return None
-
-            logger.debug(f"Found guild: {guild.name} and channel: {channel.name}")
-
-            # Check if customer is already a member
-            try:
-                if customer_id:
-                    is_member = await guild.fetch_member(int(customer_id))
-                    if is_member:
-                        logger.info(f"Customer {customer_id} is already a member of guild {guild.name}")
-                        return None
-            except discord.NotFound:
-                logger.debug(f"Customer {customer_id} is not a member of guild {guild.name}")
-            except Exception as e:
-                logger.warning(f"Error checking if customer is member: {e}")
-
-            # Handle invite creation/verification
-            try:
-                if invite_code:
-                    logger.debug(f"Attempting to fetch existing invite: {invite_code}")
-                    invite = await self.fetch_invite(invite_code)
-                    if invite:
-                        logger.info(f"Existing invite {invite_code} is valid")
-                        return invite_code
-                    else:
-                        logger.debug(f"Existing invite {invite_code} is invalid - this may be a configuration issue")
-                else:
-                    logger.debug("No existing invite code provided")
-                    invite = None
-
-                if not invite:
-                    logger.info(f"Creating new invite for channel {channel.name} in guild {guild.name}")
-                    new_invite = await channel.create_invite(reason="Invite customer to the guild", unique=False)
-                    logger.info(f"Created new invite: {new_invite.code}")
-                    return new_invite.code
-                    
-            except discord.Forbidden as e:
-                logger.debug(f"Bot lacks permission to create invites in channel {channel.name}: {e} - this is a configuration issue")
-                return None
-            except discord.HTTPException as e:
-                logger.error(f"HTTP error creating/fetching invite: {e}")
-                return None
-            except Exception as e:
-                logger.error(f"Unexpected error handling invite: {e}")
-                logger.error(f"Full traceback: {traceback.format_exc()}")
-                return None
-                
-        except discord.NotFound as e:
-            logger.debug(f"Guild or channel not found: {e} - this may be a configuration issue")
-            return None
-        except discord.Forbidden as e:
-            logger.debug(f"Bot lacks permission to access guild/channel: {e} - this is a configuration issue")
-            return None
-        except Exception as e:
-            logger.error(f"Unexpected error in verify_invite: {e}")
-            logger.error(f"Error type: {type(e).__name__}")
-            logger.error(f"Full traceback: {traceback.format_exc()}")
+        # Since invite creation is now handled by the backend, we just return the provided invite code
+        # The backend will have already created a valid invite
+        if invite_code:
+            logger.info(f"Using invite code provided by backend: {invite_code}")
+            return invite_code
+        else:
+            logger.debug("No invite code provided by backend")
             return None
 
     async def on_member_join(self, member):
