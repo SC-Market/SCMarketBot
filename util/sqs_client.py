@@ -40,7 +40,7 @@ class SQSClient:
                 # Try to use IAM roles or default credentials
                 self.sqs = boto3.client('sqs', region_name=aws_region)
                 
-            logger.info(f"SQS client initialized successfully in region {aws_region}")
+            logger.debug(f"SQS client initialized successfully in region {aws_region}")
             
         except NoCredentialsError:
             logger.error("AWS credentials not found. Please set AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY")
@@ -126,7 +126,7 @@ class SQSClient:
                 )
             )
             
-            logger.info(f"Message sent to queue '{queue_name}' with ID: {response['MessageId']}")
+            logger.debug(f"Message sent to queue '{queue_name}' with ID: {response['MessageId']}")
             return True
             
         except Exception as e:
@@ -144,8 +144,8 @@ class SQSClient:
         if not queue_url:
             return
             
-        logger.info(f"Starting SQS consumer for queue: {queue_name}")
-        logger.info(f"Consumer settings: max_messages={max_messages}, wait_time={wait_time}s")
+        logger.debug(f"Starting SQS consumer for queue: {queue_name}")
+        logger.debug(f"Consumer settings: max_messages={max_messages}, wait_time={wait_time}s")
         
         # Start health monitoring
         health_task = asyncio.create_task(self._health_monitor(queue_name))
@@ -173,7 +173,7 @@ class SQSClient:
                     if messages:
                         self.last_message_time = time.time()
                         self.message_count += len(messages)
-                        logger.info(f"Received {len(messages)} messages from queue '{queue_name}' (total: {self.message_count})")
+                        logger.debug(f"Received {len(messages)} messages from queue '{queue_name}' (total: {self.message_count})")
                         
                         # Process messages concurrently to avoid blocking
                         tasks = []
@@ -209,7 +209,7 @@ class SQSClient:
                     await asyncio.sleep(5)  # Wait before retrying
                     
         except asyncio.CancelledError:
-            logger.info(f"SQS consumer for queue '{queue_name}' was cancelled")
+            logger.debug(f"SQS consumer for queue '{queue_name}' was cancelled")
         except Exception as e:
             logger.error(f"SQS consumer for queue '{queue_name}' encountered fatal error: {e}")
         finally:
@@ -219,7 +219,7 @@ class SQSClient:
                 await health_task
             except asyncio.CancelledError:
                 pass
-            logger.info(f"SQS consumer for queue '{queue_name}' stopped")
+            logger.debug(f"SQS consumer for queue '{queue_name}' stopped")
     
     async def _health_monitor(self, queue_name: str):
         """Monitor consumer health and log status"""
@@ -236,7 +236,7 @@ class SQSClient:
                     depth = int(attributes.get('ApproximateNumberOfMessages', 0))
                     in_flight = int(attributes.get('ApproximateNumberOfMessagesNotVisible', 0))
                     
-                    logger.info(f"Queue '{queue_name}' health: depth={depth}, in_flight={in_flight}, "
+                    logger.debug(f"Queue '{queue_name}' health: depth={depth}, in_flight={in_flight}, "
                               f"last_message={time_since_last_message:.1f}s ago, "
                               f"total_messages={self.message_count}, errors={self.error_count}")
                     
@@ -268,7 +268,7 @@ class SQSClient:
                 # Log queue depth every 5 minutes
                 current_time = time.time()
                 if not hasattr(self, '_last_queue_log') or current_time - getattr(self, '_last_queue_log', 0) > 300:
-                    logger.info(f"Queue '{queue_name}' status: depth={depth}, in_flight={in_flight}")
+                    logger.debug(f"Queue '{queue_name}' status: depth={depth}, in_flight={in_flight}")
                     self._last_queue_log = current_time
                     
         except Exception as e:
@@ -279,7 +279,7 @@ class SQSClient:
         message_id = message.get('MessageId', 'unknown')
         receipt_handle = message.get('ReceiptHandle', 'unknown')
         
-        logger.info(f"Processing SQS message {message_id}")
+        logger.debug(f"Processing SQS message {message_id}")
         logger.debug(f"Message details: {message}")
         
         try:
@@ -303,7 +303,7 @@ class SQSClient:
                 processing_time = asyncio.get_event_loop().time() - start_time
                 
                 if result:
-                    logger.info(f"Successfully processed message {message_id} in {processing_time:.2f}s")
+                    logger.debug(f"Successfully processed message {message_id} in {processing_time:.2f}s")
                     
                     # Delete message after successful processing using thread pool
                     try:

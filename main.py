@@ -49,12 +49,12 @@ class SCMarket(Bot):
             if await self.discord_sqs_manager.initialize():
                 # Start consumer in background to avoid blocking main thread
                 asyncio.create_task(self.discord_sqs_manager.start_consumer())
-                logger.info("Discord SQS consumer started successfully in background")
+                logger.debug("Discord SQS consumer started successfully in background")
             else:
                 logger.error("Failed to initialize Discord SQS manager")
 
         # SQS-only mode - no web server needed
-        logger.info("Running in SQS-only mode")
+        logger.debug("Running in SQS-only mode")
 
         # Initialize aiohttp session
         try:
@@ -108,7 +108,7 @@ class SCMarket(Bot):
         try:
             if hasattr(self, 'discord_sqs_manager'):
                 await self.discord_sqs_manager.stop_consumer()
-                logger.info("Discord SQS manager stopped successfully")
+                logger.debug("Discord SQS manager stopped successfully")
         except Exception as e:
             logger.error(f"Error stopping Discord SQS manager: {e}")
         

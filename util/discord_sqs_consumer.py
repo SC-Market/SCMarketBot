@@ -27,7 +27,7 @@ class DiscordSQSMessage:
         self.entity_type_from_payload = self.entity_info.get('type')
         
         # CRITICAL: Log the extracted IDs for debugging
-        logger.info(f"DiscordSQSMessage initialized: type={self.type}, order_id={self.order_id}, entity_id={self.entity_id}, entity_type={self.entity_type}")
+        logger.debug(f"DiscordSQSMessage initialized: type={self.type}, order_id={self.order_id}, entity_id={self.entity_id}, entity_type={self.entity_type}")
         
         # Validate that we have the necessary ID for correlation
         if not self.entity_id and not self.order_id:
@@ -69,13 +69,13 @@ class DiscordSQSConsumer:
         message_id = raw_message.get('MessageId', 'unknown')
         receipt_handle = raw_message.get('ReceiptHandle', 'unknown')
         
-        logger.info(f"Processing message {message_id} from Discord queue")
+        logger.debug(f"Processing message {message_id} from Discord queue")
         logger.debug(f"Raw message: {raw_message}")
         logger.debug(f"Message body: {message_body}")
         
         try:
             discord_message = DiscordSQSMessage(message_body)
-            logger.info(f"Processing {discord_message.type} message for order {discord_message.order_id}")
+            logger.debug(f"Processing {discord_message.type} message for order {discord_message.order_id}")
             
             if discord_message.type in self.message_handlers:
                 handler = self.message_handlers[discord_message.type]
@@ -86,7 +86,7 @@ class DiscordSQSConsumer:
                 processing_time = asyncio.get_event_loop().time() - start_time
                 
                 if result:
-                    logger.info(f"Successfully processed {discord_message.type} message in {processing_time:.2f}s")
+                    logger.debug(f"Successfully processed {discord_message.type} message in {processing_time:.2f}s")
                 else:
                     logger.error(f"Failed to process {discord_message.type} message in {processing_time:.2f}s")
                 
@@ -115,7 +115,7 @@ class DiscordSQSConsumer:
         """Handle create_thread message type"""
         try:
             payload = message.payload
-            logger.info(f"Processing create_thread payload: {payload}")
+            logger.debug(f"Processing create_thread payload: {payload}")
             
             # Extract required fields
             server_id = payload.get('server_id')
@@ -132,8 +132,8 @@ class DiscordSQSConsumer:
             # Priority: entity_id from payload > order_id from metadata > fallback
             business_entity_id = entity_id or message.order_id or "unknown"
             
-            logger.info(f"Extracted fields: server_id={server_id}, channel_id={channel_id}, members={members}, entity_type={entity_type}, entity_id={entity_id}")
-            logger.info(f"Business entity ID for correlation: {business_entity_id} (from entity_id: {entity_id}, metadata order_id: {message.order_id})")
+            logger.debug(f"Extracted fields: server_id={server_id}, channel_id={channel_id}, members={members}, entity_type={entity_type}, entity_id={entity_id}")
+            logger.debug(f"Business entity ID for correlation: {business_entity_id} (from entity_id: {entity_id}, metadata order_id: {message.order_id})")
             
             # Validate required fields
             if not all([server_id, channel_id, members]):
@@ -157,7 +157,7 @@ class DiscordSQSConsumer:
                 return False
             
             # Create the thread using existing bot method
-            logger.info(f"Calling bot.order_placed with data: {{'server_id': {server_id}, 'channel_id': {channel_id}, 'members': {members}, 'order': {order}, 'customer_discord_id': {customer_discord_id}}}")
+            logger.debug(f"Calling bot.order_placed with data: {{'server_id': {server_id}, 'channel_id': {channel_id}, 'members': {members}, 'order': {order}, 'customer_discord_id': {customer_discord_id}}}")
             
             start_time = asyncio.get_event_loop().time()
             result = await self.bot.order_placed({
@@ -169,14 +169,14 @@ class DiscordSQSConsumer:
             })
             processing_time = asyncio.get_event_loop().time() - start_time
             
-            logger.info(f"Thread creation result: {result} (took {processing_time:.2f}s)")
+            logger.debug(f"Thread creation result: {result} (took {processing_time:.2f}s)")
             
             if result and not result.get('failed'):
                 # Get the newly created thread ID
                 new_thread_id = result.get('thread', {}).get('thread_id')
                 
                 # CRITICAL FIX: Ensure we're sending the business entity ID, not the thread ID
-                logger.info(f"Sending response: thread_id={new_thread_id}, original_order_id={business_entity_id}")
+                logger.debug(f"Sending response: thread_id={new_thread_id}, original_order_id={business_entity_id}")
                 
                 # Send success response
                 response = DiscordSQSResponse(
@@ -194,7 +194,7 @@ class DiscordSQSConsumer:
                 )
                 
                 await self._send_response(response)
-                logger.info(f"Thread created successfully: {new_thread_id}")
+                logger.debug(f"Thread created successfully: {new_thread_id}")
                 return True
             else:
                 # Send error response
@@ -221,7 +221,7 @@ class DiscordSQSConsumer:
             )
             
             if success:
-                logger.info(f"Response sent successfully: {response.type}")
+                logger.debug(f"Response sent successfully: {response.type}")
             else:
                 logger.error(f"Failed to send response: {response.type}")
             
@@ -241,7 +241,7 @@ class DiscordSQSConsumer:
             # CRITICAL FIX: Use the most reliable source for the business entity ID
             business_entity_id = entity_id or original_message.order_id or "unknown"
             
-            logger.info(f"Sending error response: original_order_id={business_entity_id}, error={error_message}")
+            logger.debug(f"Sending error response: original_order_id={business_entity_id}, error={error_message}")
             
             response = DiscordSQSResponse(
                 'error',
@@ -287,7 +287,7 @@ class DiscordSQSManager:
                 logger.error("SQS client initialization failed")
                 return False
                 
-            logger.info("Discord SQS manager initialized successfully")
+            logger.debug("Discord SQS manager initialized successfully")
             return True
             
         except Exception as e:
@@ -313,7 +313,7 @@ class DiscordSQSManager:
             self.health_task = asyncio.create_task(self._comprehensive_health_monitor(queue_name))
             
             self.consumer_start_time = asyncio.get_event_loop().time()
-            logger.info(f"Started Discord SQS consumer for queue: {queue_name}")
+            logger.debug(f"Started Discord SQS consumer for queue: {queue_name}")
             
         except Exception as e:
             logger.error(f"Failed to start Discord SQS consumer: {e}")
@@ -321,7 +321,7 @@ class DiscordSQSManager:
     async def _run_consumer_with_monitoring(self, queue_name: str):
         """Run the consumer with comprehensive monitoring and automatic restart"""
         try:
-            logger.info(f"Starting consumer for queue: {queue_name}")
+            logger.debug(f"Starting consumer for queue: {queue_name}")
             
             await self.sqs_client.start_consumer(
                 queue_name,
@@ -408,22 +408,22 @@ class DiscordSQSManager:
                 queue_attributes = await self.sqs_client.get_queue_attributes(queue_name) if self.sqs_client else {}
                 
                 # Log comprehensive health status
-                logger.info(f"Consumer health check - Queue: {queue_name}")
-                logger.info(f"  Consumer task: {'Healthy' if consumer_healthy else 'Unhealthy'}")
-                logger.info(f"  Uptime: {uptime:.1f}s")
-                logger.info(f"  Restart count: {self.restart_count}")
-                logger.info(f"  Last restart: {self.last_restart_time:.1f}s ago")
+                logger.debug(f"Consumer health check - Queue: {queue_name}")
+                logger.debug(f"  Consumer task: {'Healthy' if consumer_healthy else 'Unhealthy'}")
+                logger.debug(f"  Uptime: {uptime:.1f}s")
+                logger.debug(f"  Restart count: {self.restart_count}")
+                logger.debug(f"  Last restart: {self.last_restart_time:.1f}s ago")
                 
                 if sqs_health:
-                    logger.info(f"  SQS client: {sqs_health.get('client_initialized', False)}")
-                    logger.info(f"  Last message: {sqs_health.get('time_since_last_message', 0):.1f}s ago")
-                    logger.info(f"  Total messages: {sqs_health.get('message_count', 0)}")
-                    logger.info(f"  Error count: {sqs_health.get('error_count', 0)}")
+                    logger.debug(f"  SQS client: {sqs_health.get('client_initialized', False)}")
+                    logger.debug(f"  Last message: {sqs_health.get('time_since_last_message', 0):.1f}s ago")
+                    logger.debug(f"  Total messages: {sqs_health.get('message_count', 0)}")
+                    logger.debug(f"  Error count: {sqs_health.get('error_count', 0)}")
                 
                 if queue_attributes:
                     depth = int(queue_attributes.get('ApproximateNumberOfMessages', 0))
                     in_flight = int(queue_attributes.get('ApproximateNumberOfMessagesNotVisible', 0))
-                    logger.info(f"  Queue depth: {depth}, In flight: {in_flight}")
+                    logger.debug(f"  Queue depth: {depth}, In flight: {in_flight}")
                 
                 # Check for unhealthy conditions
                 if not consumer_healthy:
@@ -450,7 +450,7 @@ class DiscordSQSManager:
     
     async def stop_consumer(self):
         """Stop the Discord SQS consumer"""
-        logger.info("Stopping Discord SQS consumer...")
+        logger.debug("Stopping Discord SQS consumer...")
         
         # Cancel health monitoring
         if self.health_task and not self.health_task.done():
@@ -470,7 +470,7 @@ class DiscordSQSManager:
                 pass
         
         self.consumer_task = None
-        logger.info("Stopped Discord SQS consumer")
+        logger.debug("Stopped Discord SQS consumer")
     
     def get_health_status(self) -> Dict[str, Any]:
         """Get comprehensive health status of the SQS manager"""
