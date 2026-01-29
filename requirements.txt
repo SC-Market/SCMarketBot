@@ -4,3 +4,4 @@ aiohttp
 humanize
 ujson
 boto3
+bugsnag

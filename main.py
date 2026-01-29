@@ -7,6 +7,7 @@ from datetime import datetime
 
 import aiohttp
 import discord
+import bugsnag
 
 from discord import ChannelType
 from discord.ext.commands import Bot
@@ -465,6 +466,17 @@ class SCMarket(Bot):
 
 
 def main():
+    # Configure BugSnag
+    bugsnag_api_key = os.environ.get("BUGSNAG_API_KEY")
+    if bugsnag_api_key:
+        bugsnag.configure(
+            api_key=bugsnag_api_key,
+            project_root=os.path.dirname(os.path.abspath(__file__)),
+        )
+        logger.info("BugSnag configured successfully")
+    else:
+        logger.warning("BUGSNAG_API_KEY not found in environment variables, BugSnag will not be initialized")
+    
     # Validate configuration
     config_issues = Config.validate()
     if config_issues:
