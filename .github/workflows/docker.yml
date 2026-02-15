@@ -52,5 +52,4 @@ jobs:
         run: |
           aws lightsail update-container-service \
             --service-name sc-market \
-            --region us-east-2 \
-            --is-disabled false
+            --region us-east-2
