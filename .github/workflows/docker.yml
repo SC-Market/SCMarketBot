@@ -32,6 +32,9 @@ jobs:
         uses: docker/metadata-action@9ec57ed1fcdbf14dcef7dfbe97b2010124a938b7
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=sha,prefix=,format=short
+            type=raw,value=main
 
       - name: Build and push Docker image
         id: push
@@ -50,6 +53,10 @@ jobs:
       
       - name: Force Lightsail redeployment
         run: |
+          # Use the git SHA tag for this specific build
+          IMAGE_TAG="${{ github.sha }}"
+          IMAGE_TAG_SHORT="${IMAGE_TAG:0:7}"
+          
           # Get current deployment configuration
           CURRENT_DEPLOYMENT=$(aws lightsail get-container-services \
             --service-name sc-market \
@@ -57,15 +64,14 @@ jobs:
             --query 'containerServices[0].currentDeployment' \
             --output json)
           
-          # Extract containers config and update image tags to :main
-          CONTAINERS=$(echo $CURRENT_DEPLOYMENT | jq '.containers | 
-            .backend.image = "ghcr.io/sc-market/sc-market-backend:main" |
-            .discord.image = "ghcr.io/sc-market/scmarketbot:main"')
+          # Extract containers config and update discord image to specific SHA tag
+          CONTAINERS=$(echo $CURRENT_DEPLOYMENT | jq --arg tag "$IMAGE_TAG_SHORT" '.containers | 
+            .discord.image = "ghcr.io/sc-market/scmarketbot:" + $tag')
           
           # Extract public endpoint config
           PUBLIC_ENDPOINT=$(echo $CURRENT_DEPLOYMENT | jq '.publicEndpoint')
           
-          # Create new deployment with existing config but updated images
+          # Create new deployment with specific image tag
           aws lightsail create-container-service-deployment \
             --service-name sc-market \
             --region us-east-2 \
