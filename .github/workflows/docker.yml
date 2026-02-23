@@ -94,8 +94,9 @@ jobs:
           
           # Create new deployment with specific image tag
           echo "Creating deployment with image tag: $IMAGE_TAG_SHORT"
+          echo "Deploying to sc-market service..."
           aws lightsail create-container-service-deployment \
             --service-name sc-market \
             --region us-east-2 \
             --containers "$CONTAINERS" \
-            --public-endpoint "$PUBLIC_ENDPOINT"
+            --public-endpoint "$PUBLIC_ENDPOINT" > /dev/null
