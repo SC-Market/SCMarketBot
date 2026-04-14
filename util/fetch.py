@@ -1,9 +1,10 @@
+import asyncio
 import aiohttp
 import logging
 import traceback
 from typing import Optional, Dict, Any
 
-from cogs.registration import DISCORD_BACKEND_URL
+from util.config import Config
 
 logger = logging.getLogger('SCMarketBot.Fetch')
 
@@ -60,9 +61,9 @@ async def internal_fetch(url, params=None, session=None):
             tempsession = session
 
         logger.debug(f"Making internal fetch request to: {url} with params: {params}")
-        
+
         async with tempsession.get(
-                f"{DISCORD_BACKEND_URL}{url}",
+                f"{Config.DISCORD_BACKEND_URL}{url}",
                 params=params
         ) as resp:
             if not resp.ok:
@@ -109,7 +110,7 @@ async def internal_post(url, params=None, json=None, session=None):
         logger.debug(f"Making internal post request to: {url} with params: {params}, json: {json}")
         
         async with tempsession.post(
-                f"{DISCORD_BACKEND_URL}{url}",
+                f"{Config.DISCORD_BACKEND_URL}{url}",
                 params=params,
                 json=json,
         ) as resp:

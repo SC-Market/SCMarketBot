@@ -3,10 +3,15 @@ from typing import Dict, Any
 
 class Config:
     """Configuration class for the SCMarket bot"""
-    
+
     # Discord settings
     DISCORD_API_KEY = os.environ.get("DISCORD_API_KEY")
-    DISCORD_BACKEND_URL = os.environ.get("DISCORD_BACKEND_URL", "http://web:8081")
+    # Main backend HTTP origin (same host/port as the public API / BACKEND_URL). No trailing slash.
+    # Local: http://localhost:8080  ·  Docker Compose (bot → web): http://web:8080
+    DISCORD_BACKEND_URL = os.environ.get("DISCORD_BACKEND_URL", "http://localhost:8080")
+
+    # Error reporting (optional)
+    BUGSNAG_API_KEY = (os.environ.get("BUGSNAG_API_KEY") or "").strip() or None
     
     # AWS SQS settings
     AWS_ACCESS_KEY_ID = os.environ.get("AWS_ACCESS_KEY_ID")

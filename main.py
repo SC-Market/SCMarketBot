@@ -85,7 +85,19 @@ class SCMarket(Bot):
         logger.error(f"Channel: {interaction.channel.id} ({interaction.channel.name if hasattr(interaction.channel, 'name') else 'DM'})")
         logger.error(f"Guild: {interaction.guild.id if interaction.guild else 'DM'} ({interaction.guild.name if interaction.guild else 'DM'})")
         logger.error(f"Full error: {traceback.format_exc()}")
-        
+
+        if Config.BUGSNAG_API_KEY:
+            bugsnag.notify(
+                error,
+                context="on_command_error",
+                meta_data={
+                    "command": {
+                        "name": interaction.command.name if interaction.command else None,
+                        "user_id": str(interaction.user.id),
+                    }
+                },
+            )
+
         # Send user-friendly error message
         try:
             if interaction.response.is_done():
@@ -120,6 +132,16 @@ class SCMarket(Bot):
         logger.error(f"Error in Discord event {event_method}: {traceback.format_exc()}")
         logger.error(f"Event args: {args}")
         logger.error(f"Event kwargs: {kwargs}")
+        if Config.BUGSNAG_API_KEY:
+            err = sys.exc_info()[1]
+            if err:
+                bugsnag.notify(
+                    err,
+                    context=f"Discord event {event_method}",
+                    meta_data={
+                        "event": {"args": repr(args), "kwargs": repr(kwargs)},
+                    },
+                )
 
     async def on_message(self, message):
         """Enhanced message handling with comprehensive logging"""
@@ -466,16 +488,14 @@ class SCMarket(Bot):
 
 
 def main():
-    # Configure BugSnag
-    bugsnag_api_key = os.environ.get("BUGSNAG_API_KEY")
-    if bugsnag_api_key:
+    if Config.BUGSNAG_API_KEY:
         bugsnag.configure(
-            api_key=bugsnag_api_key,
+            api_key=Config.BUGSNAG_API_KEY,
             project_root=os.path.dirname(os.path.abspath(__file__)),
         )
-        logger.info("BugSnag configured successfully")
+        logger.info("BugSnag configured from BUGSNAG_API_KEY")
     else:
-        logger.warning("BUGSNAG_API_KEY not found in environment variables, BugSnag will not be initialized")
+        logger.warning("BUGSNAG_API_KEY not set; BugSnag disabled")
     
     # Validate configuration
     config_issues = Config.validate()
@@ -499,6 +519,8 @@ def main():
         logger.error(f"Unexpected error during bot execution: {e}")
         logger.error(f"Error type: {type(e).__name__}")
         logger.error(f"Full traceback: {traceback.format_exc()}")
+        if Config.BUGSNAG_API_KEY:
+            bugsnag.notify(e, context="bot main")
     finally:
         # Log shutdown information
         LoggingConfig.log_shutdown_info()
