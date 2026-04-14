@@ -166,7 +166,7 @@ class SCMarket(Bot):
                     logger.debug(f"Sending message to backend: {payload}")
                     
                     async with self.session.post(
-                        f'{Config.DISCORD_BACKEND_URL}/threads/message',
+                        f'{Config.discord_backend_base()}/threads/message',
                         json=payload
                     ) as resp:
                         response_data = await resp.read()
@@ -263,7 +263,7 @@ class SCMarket(Bot):
                 logger.debug(f"Fetching threads for user {member.id}")
                 
                 async with session.get(
-                        f'{Config.DISCORD_BACKEND_URL}/threads/user/{member.id}',
+                        f'{Config.discord_backend_base()}/threads/user/{member.id}',
                 ) as resp:
                     if not resp.ok:
                         logger.error(f"Failed to fetch threads for user {member.id}: {resp.status} - {resp.reason}")
@@ -503,7 +503,7 @@ def main():
         logger.error("Configuration validation failed:")
         for issue, description in config_issues.items():
             logger.error(f"  {issue}: {description}")
-        return
+        sys.exit(1)
     
     # Log startup information
     LoggingConfig.log_startup_info()

@@ -1,14 +1,26 @@
 import os
-from typing import Dict, Any
+from typing import Dict, Any, Optional
+
+
+def _normalize_discord_backend_url(raw: Optional[str]) -> Optional[str]:
+    """Normalize internal discord_app base URL, or None if unset/blank (invalid until env is provided)."""
+    if raw is None or not str(raw).strip():
+        return None
+    url = str(raw).strip().rstrip("/")
+    if url.endswith("/api"):
+        url = url[: -len("/api")].rstrip("/")
+    return url or None
+
 
 class Config:
     """Configuration class for the SCMarket bot"""
 
     # Discord settings
     DISCORD_API_KEY = os.environ.get("DISCORD_API_KEY")
-    # Main backend HTTP origin (same host/port as the public API / BACKEND_URL). No trailing slash.
-    # Local: http://localhost:8080  ·  Docker Compose (bot → web): http://web:8080
-    DISCORD_BACKEND_URL = os.environ.get("DISCORD_BACKEND_URL", "http://localhost:8080")
+    # Required: internal discord_app in server.ts (e.g. http://localhost:8081 or http://web:8081).
+    DISCORD_BACKEND_URL: Optional[str] = _normalize_discord_backend_url(
+        os.environ.get("DISCORD_BACKEND_URL"),
+    )
 
     # Error reporting (optional)
     BUGSNAG_API_KEY = (os.environ.get("BUGSNAG_API_KEY") or "").strip() or None
@@ -47,13 +59,25 @@ class Config:
         
         if not cls.DISCORD_API_KEY:
             issues['DISCORD_API_KEY'] = 'Discord API key is required'
-        
+
+        if not cls.DISCORD_BACKEND_URL:
+            issues['DISCORD_BACKEND_URL'] = (
+                'DISCORD_BACKEND_URL is required (discord_app base URL, e.g. http://localhost:8081)'
+            )
+
         if cls.ENABLE_SQS:
             if not cls.AWS_ACCESS_KEY_ID or not cls.AWS_SECRET_ACCESS_KEY:
                 issues['AWS_CREDENTIALS'] = 'AWS credentials are required when SQS is enabled'
-        
+
         return issues
-    
+
+    @classmethod
+    def discord_backend_base(cls) -> str:
+        """Resolved internal backend base URL; raises if unset (after validate(), always defined)."""
+        if not cls.DISCORD_BACKEND_URL:
+            raise RuntimeError("DISCORD_BACKEND_URL is not set")
+        return cls.DISCORD_BACKEND_URL
+
     @classmethod
     def get_sqs_queue_name(cls, queue_type: str) -> str:
         """Get the SQS queue name for a specific type"""
