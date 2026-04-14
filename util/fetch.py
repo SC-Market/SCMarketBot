@@ -63,7 +63,7 @@ async def internal_fetch(url, params=None, session=None):
         logger.debug(f"Making internal fetch request to: {url} with params: {params}")
 
         async with tempsession.get(
-                f"{Config.DISCORD_BACKEND_URL}{url}",
+                f"{Config.discord_backend_base()}{url}",
                 params=params
         ) as resp:
             if not resp.ok:
@@ -110,7 +110,7 @@ async def internal_post(url, params=None, json=None, session=None):
         logger.debug(f"Making internal post request to: {url} with params: {params}, json: {json}")
         
         async with tempsession.post(
-                f"{Config.DISCORD_BACKEND_URL}{url}",
+                f"{Config.discord_backend_base()}{url}",
                 params=params,
                 json=json,
         ) as resp:

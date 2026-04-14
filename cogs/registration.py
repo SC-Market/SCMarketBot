@@ -18,7 +18,7 @@ REQUEST_TIMEOUT = aiohttp.ClientTimeout(total=30)
 
 
 def _registration_endpoint(entity: str, name: str) -> str:
-    base = Config.DISCORD_BACKEND_URL.rstrip("/")
+    base = Config.discord_backend_base().rstrip("/")
     if entity == "user":
         return f"{base}/register/user"
     trimmed = (name or "").strip()
