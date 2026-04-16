@@ -17,7 +17,6 @@ from cogs.lookup import Lookup
 from cogs.order import order
 from cogs.registration import Registration
 from cogs.stock import stock
-from cogs.subscribe import AlertSubscriptions
 
 from util.config import Config
 from util.result import Result
@@ -42,7 +41,6 @@ class SCMarket(Bot):
         await self.add_cog(Lookup(self))
         await self.add_cog(order(self))
         await self.add_cog(stock(self))
-        await self.add_cog(AlertSubscriptions(self))
 
         await self.tree.sync()
 
