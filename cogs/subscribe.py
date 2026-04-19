@@ -45,6 +45,12 @@ class AlertSubscriptions(commands.Cog):
 
                     if not resp.ok or not data.get("success"):
                         error = data.get("error", "Unknown error")
+                        # Remove the claim button if the backend says the state is invalid
+                        if data.get("remove_button"):
+                            try:
+                                await interaction.message.edit(view=None)
+                            except Exception:
+                                pass
                         await interaction.followup.send(f"❌ {error}", ephemeral=True)
                         return
 
