@@ -18,6 +18,11 @@ from cogs.order import order
 from cogs.registration import Registration
 from cogs.stock import stock
 from cogs.subscribe import AlertSubscriptions
+from cogs.price import Price
+from cogs.watchlist import Watchlist
+from cogs.listing import Listing
+from cogs.marketplace import Marketplace
+from cogs.blueprint import Blueprint
 
 from util.config import Config
 from util.result import Result
@@ -43,6 +48,11 @@ class SCMarket(Bot):
         await self.add_cog(order(self))
         await self.add_cog(stock(self))
         await self.add_cog(AlertSubscriptions(self))
+        await self.add_cog(Price(self))
+        await self.add_cog(Watchlist(self))
+        await self.add_cog(Listing(self))
+        await self.add_cog(Marketplace(self))
+        await self.add_cog(Blueprint(self))
 
         await self.tree.sync()
 
