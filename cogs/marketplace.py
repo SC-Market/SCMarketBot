@@ -155,6 +155,11 @@ class MarketplaceView(discord.ui.View):
         self.listing_id = listing_id
         self.listing_title = listing_title
         self.price = price
+        self.add_item(discord.ui.Button(
+            label="View on Site",
+            style=discord.ButtonStyle.link,
+            url=f"https://sc-market.space/market/{listing_id}",
+        ))
 
     @discord.ui.button(label="Buy Now", style=discord.ButtonStyle.green, emoji="🛒")
     async def buy_button(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -166,9 +171,7 @@ class MarketplaceView(discord.ui.View):
         modal = OfferModal(self.bot, self.listing_id, self.listing_title)
         await interaction.response.send_modal(modal)
 
-    @discord.ui.button(label="View on Site", style=discord.ButtonStyle.link, url="https://sc-market.space")
-    async def view_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        pass
+    # URL buttons can't use the decorator pattern — added in __init__ of parent class
 
 
 class UEXImportView(discord.ui.View):
