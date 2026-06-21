@@ -6,8 +6,57 @@ from discord.ext import commands
 from discord.ext.paginators.button_paginator import ButtonPaginator
 
 from util.fetch import public_fetch, search_users, search_orgs
-from util.listings import create_market_embed, categories, sorting_methods, sale_types, create_market_embed_individual, \
-    display_listings_compact
+from util.listings import (
+    create_v2_search_embed,
+    v2_sorting_methods,
+    v2_item_types,
+    display_listings_compact,
+)
+
+
+class SearchResultView(discord.ui.View):
+    """Paginator with Buy/Offer buttons for search results."""
+
+    def __init__(self, listings: list, author_id: int):
+        super().__init__(timeout=600)
+        self.listings = listings
+        self.author_id = author_id
+        self.current_page = 0
+
+    def get_embed(self):
+        return create_v2_search_embed(self.listings[self.current_page])
+
+    def get_listing(self):
+        return self.listings[self.current_page]
+
+    @discord.ui.button(emoji="◀️", style=discord.ButtonStyle.secondary)
+    async def prev_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user.id != self.author_id:
+            return
+        self.current_page = (self.current_page - 1) % len(self.listings)
+        await interaction.response.edit_message(embed=self.get_embed(), view=self)
+
+    @discord.ui.button(emoji="▶️", style=discord.ButtonStyle.secondary)
+    async def next_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user.id != self.author_id:
+            return
+        self.current_page = (self.current_page + 1) % len(self.listings)
+        await interaction.response.edit_message(embed=self.get_embed(), view=self)
+
+    @discord.ui.button(label="Buy", style=discord.ButtonStyle.green, emoji="🛒")
+    async def buy_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        from cogs.marketplace import BuyModal
+        listing = self.get_listing()
+        price = listing.get('price_min', 0)
+        modal = BuyModal(interaction.client, listing['listing_id'], listing['title'], price)
+        await interaction.response.send_modal(modal)
+
+    @discord.ui.button(label="Offer", style=discord.ButtonStyle.blurple, emoji="💬")
+    async def offer_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        from cogs.marketplace import OfferModal
+        listing = self.get_listing()
+        modal = OfferModal(interaction.client, listing['listing_id'], listing['title'])
+        await interaction.response.send_modal(modal)
 
 
 class Lookup(commands.Cog):
@@ -17,64 +66,75 @@ class Lookup(commands.Cog):
     @app_commands.command(name="search")
     @app_commands.describe(
         query='The search query',
-        category='What category the item belongs to',
+        item_type='What category the item belongs to',
         sorting='What order to sort the listings by',
-        sale_type='The method of sale',
-        quantity_available='The minimum quantity available an item must have',
+        quantity_available='The minimum quantity available',
         min_cost='The minimum cost of items to search',
         max_cost='The maximum cost of items to search',
+        quality_min='Minimum quality tier (1-5)',
+        quality_max='Maximum quality tier (1-5)',
     )
     @app_commands.choices(
-        category=[
-            app_commands.Choice(name=item, value=item.lower()) for item in categories
+        item_type=[
+            app_commands.Choice(name=item.capitalize(), value=item) for item in v2_item_types
         ],
         sorting=[
-            app_commands.Choice(name=value, value=key) for key, value in sorting_methods.items()
-        ],
-        sale_type=[
-            app_commands.Choice(name=item, value=item.lower()) for item in sale_types
+            app_commands.Choice(name=value, value=key) for key, value in v2_sorting_methods.items()
         ],
     )
     async def search(
             self,
             interaction: discord.Interaction,
             query: str,
-            category: app_commands.Choice[str] = '',
-            sorting: app_commands.Choice[str] = 'activity',
-            sale_type: app_commands.Choice[str] = '',
+            item_type: app_commands.Choice[str] = None,
+            sorting: app_commands.Choice[str] = None,
             quantity_available: int = 1,
             min_cost: int = 0,
             max_cost: int = 0,
+            quality_min: int = None,
+            quality_max: int = None,
     ):
-        """Search the site market listings"""
+        """Search the SC Market listings"""
+        await interaction.response.defer()
+
         params = {
-            'query': query,
-            'sort': sorting,
-            'quantityAvailable': quantity_available,
-            'minCost': min_cost,
-            'page_size': 48,
-            'index': 0
+            'text': query,
+            'sort_by': sorting.value if sorting else 'created_at',
+            'sort_order': 'desc' if not sorting or sorting.value != 'price' else 'asc',
+            'quantity_min': quantity_available,
+            'page': 1,
+            'page_size': 25,
         }
 
-        if category:
-            params['item_type'] = category
-        if sale_type:
-            params['sale_type'] = sale_type
+        if item_type:
+            params['item_type'] = item_type.value
+        if min_cost:
+            params['price_min'] = min_cost
         if max_cost:
-            params['maxCost'] = max_cost
+            params['price_max'] = max_cost
+        if quality_min:
+            params['quality_tier_min'] = quality_min
+        if quality_max:
+            params['quality_tier_max'] = quality_max
 
         result = await public_fetch(
-            "/market/public/search",
+            "/v2/listings/search",
             params=params,
             session=self.bot.session,
         )
 
-        embeds = [create_market_embed(item) for item in result['listings'] if item['listing']['quantity_available']]
-        if not embeds:
-            await interaction.response.send_message("No results found")
+        listings = result.get('listings', [])
+        if not listings:
+            await interaction.followup.send("No results found")
+            return
 
-        paginator = ButtonPaginator(embeds, author_id=interaction.user.id)
-        await paginator.send(interaction)
+        active_listings = [item for item in listings if item.get('quantity_available', 0) > 0]
+        if not active_listings:
+            await interaction.followup.send("No results found")
+            return
+
+        view = SearchResultView(active_listings, interaction.user.id)
+        await interaction.followup.send(embed=view.get_embed(), view=view)
 
     lookup = app_commands.Group(name="lookup", description="Look up an org or user's market listings")
 
@@ -89,25 +149,32 @@ class Lookup(commands.Cog):
             compact: bool = False,
     ):
         """Lookup the market listings for a user"""
+        await interaction.response.defer()
+
         try:
-            listings = await public_fetch(
-                f"/market/user/{handle}",
+            # Resolve user's shop slug (convention: username-shop)
+            shop_slug = f"{handle.lower()}-shop"
+            result = await public_fetch(
+                "/v2/listings/search",
+                params={'shop_slug': shop_slug, 'page_size': 50},
                 session=self.bot.session,
             )
-        except:
-            await interaction.response.send_message("Invalid user")
+        except Exception:
+            await interaction.followup.send("Invalid user or no listings found")
+            return
+
+        listings = result.get('listings', [])
+        if not listings:
+            await interaction.followup.send("No listings to display for user")
             return
 
         if compact:
-            await display_listings_compact(interaction, [{**l['details'], **l['listing']} for l in listings])
+            await display_listings_compact(interaction, listings)
         else:
-            embeds = [create_market_embed_individual(item) for item in listings if
-                      item['listing']['quantity_available']]
-
+            embeds = [create_v2_search_embed(item) for item in listings if item.get('quantity_available', 0) > 0]
             if not embeds:
-                await interaction.response.send_message("No listings to display for org")
+                await interaction.followup.send("No listings to display for user")
                 return
-
             paginator = ButtonPaginator(embeds, author_id=interaction.user.id)
             await paginator.send(interaction)
 
@@ -122,25 +189,30 @@ class Lookup(commands.Cog):
             compact: bool = False,
     ):
         """Lookup the market listings for an org"""
+        await interaction.response.defer()
+
         try:
-            listings = await public_fetch(
-                f"/market/contractor/{spectrum_id}",
+            result = await public_fetch(
+                "/v2/listings/search",
+                params={'contractor_spectrum_id': spectrum_id, 'page_size': 50},
                 session=self.bot.session,
             )
-        except:
-            await interaction.response.send_message("Invalid org")
+        except Exception:
+            await interaction.followup.send("Invalid org or no listings found")
+            return
+
+        listings = result.get('listings', [])
+        if not listings:
+            await interaction.followup.send("No listings to display for org")
             return
 
         if compact:
-            await display_listings_compact(interaction, [{**l['details'], **l['listing']} for l in listings])
+            await display_listings_compact(interaction, listings)
         else:
-            embeds = [create_market_embed_individual(item) for item in listings if
-                      item['listing']['quantity_available']]
-
+            embeds = [create_v2_search_embed(item) for item in listings if item.get('quantity_available', 0) > 0]
             if not embeds:
-                await interaction.response.send_message("No listings to display for org")
+                await interaction.followup.send("No listings to display for org")
                 return
-
             paginator = ButtonPaginator(embeds, author_id=interaction.user.id)
             await paginator.send(interaction)
 
