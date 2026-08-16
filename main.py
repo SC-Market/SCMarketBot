@@ -28,6 +28,12 @@ from util.config import Config
 from util.result import Result
 from util.discord_sqs_consumer import DiscordSQSManager
 from util.logging_config import LoggingConfig
+from util.thread_planning import (
+    build_thread_name,
+    plan_thread_creation,
+    STRATEGY_FORUM,
+    STRATEGY_TEXT,
+)
 
 intents = discord.Intents.default()
 intents.members = True
@@ -343,8 +349,10 @@ class SCMarket(Bot):
         logger.info(f"Creating thread: server_id={server_id}, channel_id={channel_id}, members={members}")
         logger.debug(f"Offer details: {offer}")
         
-        if not server_id or not channel_id or not members:
-            error_msg = f"Missing required parameters: server_id={server_id}, channel_id={channel_id}, members={members}"
+        # `members` may be empty (no linked Discord accounts yet); the thread is still
+        # created so server admins/staff can see it, and members are added if/when present.
+        if not server_id or not channel_id:
+            error_msg = f"Missing required parameters: server_id={server_id}, channel_id={channel_id}"
             logger.error(error_msg)
             return Result(error=error_msg)
 
@@ -397,16 +405,34 @@ class SCMarket(Bot):
                 return Result(error=error_msg)
 
             # Determine thread name
-            is_order = offer.get("order_id")
-            thread_name = f"{'order' if is_order else 'offer'}-{offer.get('id', offer.get('order_id'))[:8]}"
+            thread_name = build_thread_name(offer)
             logger.debug(f"Creating thread with name: {thread_name}")
 
-            # Create thread
+            # Create thread. Text/announcement channels support private threads. Forum
+            # channels do NOT (their `create_thread` has no `type` kwarg — passing one
+            # previously raised a TypeError and crash-looped into the DLQ); they open a post
+            # from a starter message and return a ThreadWithMessage instead of a Thread.
+            strategy = plan_thread_creation(channel.type)
             try:
-                thread = await channel.create_thread(
-                    name=thread_name,
-                    type=ChannelType.private_thread
-                )
+                if strategy == STRATEGY_FORUM:
+                    created = await channel.create_thread(
+                        name=thread_name,
+                        content=f"SC Market thread: {thread_name}",
+                    )
+                    thread = created.thread
+                elif strategy == STRATEGY_TEXT:
+                    thread = await channel.create_thread(
+                        name=thread_name,
+                        type=ChannelType.private_thread,
+                    )
+                else:
+                    error_msg = (
+                        f"Configured thread channel {channel_id} ('{getattr(channel, 'name', channel_id)}') "
+                        f"in guild {guild.name} is a {type(channel).__name__}, which cannot host order "
+                        f"threads. The shop must select a text or forum channel."
+                    )
+                    logger.error(error_msg)
+                    return Result(error=error_msg)
                 logger.info(f"Successfully created thread: {thread.id} with name: {thread.name}")
             except discord.Forbidden as e:
                 error_msg = f"The bot does not have permission to create threads in channel {channel.name}: {e}"

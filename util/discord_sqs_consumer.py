@@ -6,6 +6,7 @@ from typing import Dict, Any, Optional
 from datetime import datetime
 
 from util.config import Config
+from util.thread_planning import validate_create_thread_fields
 
 logger = logging.getLogger('SCMarketBot.DiscordSQSConsumer')
 
@@ -135,9 +136,11 @@ class DiscordSQSConsumer:
             logger.debug(f"Extracted fields: server_id={server_id}, channel_id={channel_id}, members={members}, entity_type={entity_type}, entity_id={entity_id}")
             logger.debug(f"Business entity ID for correlation: {business_entity_id} (from entity_id: {entity_id}, metadata order_id: {message.order_id})")
             
-            # Validate required fields
-            if not all([server_id, channel_id, members]):
-                error_msg = f"Missing required fields for create_thread: server_id={server_id}, channel_id={channel_id}, members={members}"
+            # Validate destination fields. A missing server/channel is a genuine error.
+            # `members` MAY be empty (e.g. the customer hasn't linked Discord and there is no
+            # assignee) — we still create the thread so server admins/staff can see and use it.
+            error_msg = validate_create_thread_fields(server_id, channel_id)
+            if error_msg:
                 logger.error(error_msg)
                 logger.error(f"Payload: {payload}")
                 await self._send_error_response(message, error_msg)
