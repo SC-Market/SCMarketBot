@@ -17,10 +17,20 @@ class Config:
 
     # Discord settings
     DISCORD_API_KEY = os.environ.get("DISCORD_API_KEY")
-    # Required: internal discord_app in server.ts (e.g. http://localhost:8081 or http://web:8081).
-    DISCORD_BACKEND_URL: Optional[str] = _normalize_discord_backend_url(
-        os.environ.get("DISCORD_BACKEND_URL"),
-    )
+    # Internal discord_app base URL (server.ts) — serves /register, /threads,
+    # /claim, /alert-subscriptions.
+    #
+    # PINNED to localhost:8081 (was env-driven). The deployed bot's
+    # DISCORD_BACKEND_URL pointed at the wrong server (the main API on :8080),
+    # so every discord_app-only route returned 404 ("Cannot POST ..."). In
+    # Lightsail the bot and backend share one container service and discord_app
+    # listens on 8081 (sc-market-cdk lib/lightsail-stack.ts DISCORD_APP_PORT),
+    # so it's reachable at localhost:8081. Pinning here fixes it without a live
+    # env change (which we can't make from CI). Local docker-compose is unused,
+    # so hardcoding localhost is safe.
+    # TODO: revert to _normalize_discord_backend_url(os.environ.get(...)) once the
+    # deployment's DISCORD_BACKEND_URL env is corrected to http://localhost:8081.
+    DISCORD_BACKEND_URL: str = "http://localhost:8081"
 
     # Error reporting (optional)
     BUGSNAG_API_KEY = (os.environ.get("BUGSNAG_API_KEY") or "").strip() or None

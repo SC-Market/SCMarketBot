@@ -5,9 +5,12 @@ from discord import app_commands
 import logging
 import aiohttp
 
+from util.config import Config
+
 logger = logging.getLogger('SCMarketBot.SubscribeCog')
 
-DISCORD_BACKEND_URL = os.environ.get("DISCORD_BACKEND_URL", "http://localhost:8081")
+# Single source of truth for the internal discord_app base URL (pinned in Config).
+DISCORD_BACKEND_URL = Config.discord_backend_base()
 
 
 class AlertSubscriptions(commands.Cog):
