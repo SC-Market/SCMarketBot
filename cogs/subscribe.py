@@ -67,7 +67,12 @@ class AlertSubscriptions(commands.Cog):
                         custom_id=f"claim_{claim_type}:{entity_id}",
                     ))
                     await interaction.message.edit(view=view)
-                    await interaction.followup.send(f"✅ You've been assigned to this {claim_type}!", ephemeral=True)
+                    await interaction.followup.send(
+                        f"✅ You've been assigned to this {claim_type}!\n"
+                        f"You're now the owner of this {claim_type}; open the fulfillment thread to coordinate and complete it.\n"
+                        "-# Manage this channel's alerts with /unsubscribe alerts",
+                        ephemeral=True,
+                    )
 
         except Exception as e:
             logger.error(f"Failed to handle claim {claim_type}: {e}")
@@ -99,6 +104,15 @@ class AlertSubscriptions(commands.Cog):
                         description=f"This channel will now receive order and offer alerts for **{org_name}**.\n\nMembers with the **Claim Orders** permission can click the button on alerts to assign themselves.",
                         color=0x10b881,
                     )
+                    embed.add_field(
+                        name="What's next",
+                        value=(
+                            f"New order and offer alerts for **{org_name}** will now be posted here as they come in; "
+                            "members with the **Claim Orders** permission can click the button on an alert to self-assign.\n"
+                            "-# Stop with /unsubscribe alerts"
+                        ),
+                        inline=False,
+                    )
                     await interaction.followup.send(embed=embed, ephemeral=True)
         except Exception as e:
             logger.error(f"Failed to subscribe alerts: {e}")
@@ -126,6 +140,15 @@ class AlertSubscriptions(commands.Cog):
                         description="This channel will now receive your personal order and offer alerts.",
                         color=0x10b881,
                     )
+                    embed.add_field(
+                        name="What's next",
+                        value=(
+                            "New order and offer alerts for you will now be posted here as they come in; "
+                            "members with the **Claim Orders** permission can click the button on an alert to self-assign.\n"
+                            "-# Stop with /unsubscribe alerts"
+                        ),
+                        inline=False,
+                    )
                     await interaction.followup.send(embed=embed, ephemeral=True)
         except Exception as e:
             logger.error(f"Failed to subscribe user alerts: {e}")
@@ -147,7 +170,12 @@ class AlertSubscriptions(commands.Cog):
                     if not resp.ok:
                         await interaction.followup.send("❌ Failed to remove subscription.", ephemeral=True)
                         return
-                    await interaction.followup.send("✅ Alert subscription removed from this channel.", ephemeral=True)
+                    await interaction.followup.send(
+                        "✅ Alert subscription removed from this channel.\n"
+                        "This channel will stop receiving alerts.\n"
+                        "-# Re-enable anytime with /subscribe alerts <org> or /subscribe alerts_user",
+                        ephemeral=True,
+                    )
         except Exception as e:
             logger.error(f"Failed to unsubscribe alerts: {e}")
             await interaction.followup.send("❌ An error occurred.", ephemeral=True)

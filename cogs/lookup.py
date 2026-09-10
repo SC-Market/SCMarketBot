@@ -63,16 +63,19 @@ class Lookup(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    @app_commands.command(name="search")
+    @app_commands.command(
+        name="search",
+        description="Search SC Market listings by name, category, price, and quality",
+    )
     @app_commands.describe(
-        query='The search query',
-        item_type='What category the item belongs to',
-        sorting='What order to sort the listings by',
-        quantity_available='The minimum quantity available',
-        min_cost='The minimum cost of items to search',
-        max_cost='The maximum cost of items to search',
-        quality_min='Minimum quality tier (1-5)',
-        quality_max='Maximum quality tier (1-5)',
+        query='Item or service to search for, e.g. Medical Supplies',
+        item_type='Category to filter by, e.g. Armor',
+        sorting='Order to sort results by, e.g. Price: Low to High',
+        quantity_available='Minimum quantity in stock, e.g. 10',
+        min_cost='Minimum price in aUEC, e.g. 1000',
+        max_cost='Maximum price in aUEC, e.g. 50000',
+        quality_min='Minimum quality tier from 1 to 5, e.g. 2',
+        quality_max='Maximum quality tier from 1 to 5, e.g. 5',
     )
     @app_commands.choices(
         item_type=[
@@ -138,9 +141,10 @@ class Lookup(commands.Cog):
 
     lookup = app_commands.Group(name="lookup", description="Look up an org or user's market listings")
 
-    @lookup.command(name="user")
+    @lookup.command(name="user", description="Look up a user's SC Market listings")
     @app_commands.describe(
-        handle='The handle of the user',
+        handle='Handle (username) of the user, e.g. henry232323',
+        compact='Show a compact one-line list instead of full embeds, e.g. True',
     )
     async def user_search(
             self,
@@ -178,9 +182,10 @@ class Lookup(commands.Cog):
             paginator = ButtonPaginator(embeds, author_id=interaction.user.id)
             await paginator.send(interaction)
 
-    @lookup.command(name="org")
+    @lookup.command(name="org", description="Look up an org's SC Market listings")
     @app_commands.describe(
-        spectrum_id='The spectrum ID of the org',
+        spectrum_id='Spectrum ID of the org, e.g. SCMARKET',
+        compact='Show a compact one-line list instead of full embeds, e.g. True',
     )
     async def org_search(
             self,

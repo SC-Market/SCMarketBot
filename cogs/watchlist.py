@@ -9,14 +9,14 @@ from util.fetch import internal_post, internal_fetch, public_fetch
 logger = logging.getLogger('SCMarketBot.WatchlistCog')
 
 
-class Watchlist(commands.GroupCog, group_name="watchlist"):
+class Watchlist(commands.GroupCog, group_name="watchlist", group_description="Track item prices and get alerts when they drop"):
     def __init__(self, bot):
         self.bot = bot
 
-    @app_commands.command(name="add")
+    @app_commands.command(name="add", description="Watch an item and get alerted when it hits your target price")
     @app_commands.describe(
-        query='Item name to watch',
-        max_price='Get notified when price drops below this amount (aUEC)',
+        query='Item name to watch, e.g. Medical Supplies',
+        max_price='Alert when the price is at or below this amount in aUEC, e.g. 25000',
     )
     async def watchlist_add(
             self,
@@ -49,11 +49,18 @@ class Watchlist(commands.GroupCog, group_name="watchlist"):
                 description=f"You'll be notified when **{query}** is listed at or below **{max_price:,} aUEC**.",
                 color=0x10b881,
             )
+            embed.add_field(
+                name="What's next",
+                value="From now on you'll get a DM whenever a matching listing drops to your target "
+                      "price or comes back in stock.\n"
+                      "-# Stop alerts with /watchlist remove · see everything you watch with /watchlist list",
+                inline=False,
+            )
             await interaction.followup.send(embed=embed, ephemeral=True)
 
-    @app_commands.command(name="remove")
+    @app_commands.command(name="remove", description="Stop watching an item and cancel its price alerts")
     @app_commands.describe(
-        item='The watchlist item to remove (use /watchlist list to see IDs)',
+        item='Watchlist item to remove; pick from the list, e.g. Medical Supplies (≤ 25,000 aUEC)',
     )
     async def watchlist_remove(
             self,
@@ -75,9 +82,13 @@ class Watchlist(commands.GroupCog, group_name="watchlist"):
         if response.get("error"):
             await interaction.followup.send(f"Failed to remove: {response['error']}", ephemeral=True)
         else:
-            await interaction.followup.send("Removed from your watchlist.", ephemeral=True)
+            await interaction.followup.send(
+                "Removed from your watchlist. You'll no longer get price or stock alerts for this item.\n"
+                "-# Watch it again with /watchlist add · see what's left with /watchlist list",
+                ephemeral=True,
+            )
 
-    @app_commands.command(name="list")
+    @app_commands.command(name="list", description="View the items on your watchlist and their price alerts")
     async def watchlist_list(self, interaction: discord.Interaction):
         """View your current watchlist"""
         await interaction.response.defer(ephemeral=True)

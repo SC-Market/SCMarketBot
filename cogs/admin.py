@@ -46,9 +46,9 @@ class Admin(commands.GroupCog):
             return False
         return True
 
-    @app_commands.command(name="health")
+    @app_commands.command(name="health", description="Check the health of bot components (SQS consumer, HTTP session, latency)")
     @app_commands.describe(
-        component='The component to check health for (sqs, all)'
+        component='Component to check, e.g. sqs or all'
     )
     async def health_check(
         self,
@@ -73,7 +73,7 @@ class Admin(commands.GroupCog):
             logger.error(f"Error in health check: {e}")
             await interaction.followup.send(f"Error during health check: {e}", ephemeral=True)
     
-    @app_commands.command(name="restart_sqs")
+    @app_commands.command(name="restart_sqs", description="Manually restart the SQS consumer")
     async def restart_sqs(self, interaction: discord.Interaction):
         """Manually restart the SQS consumer"""
         # Check permissions first
@@ -107,7 +107,7 @@ class Admin(commands.GroupCog):
             logger.error(f"Error restarting SQS consumer: {e}")
             await interaction.followup.send(f"❌ Error restarting SQS consumer: {e}", ephemeral=True)
     
-    @app_commands.command(name="queue_status")
+    @app_commands.command(name="queue_status", description="Show current SQS queue depth, in-flight count, and settings")
     async def queue_status(self, interaction: discord.Interaction):
         """Get current SQS queue status"""
         # Check permissions first
@@ -194,7 +194,7 @@ class Admin(commands.GroupCog):
             logger.error(f"Error getting queue status: {e}")
             await interaction.response.send_message(f"Error getting queue status: {e}", ephemeral=True)
     
-    @app_commands.command(name="admin_info")
+    @app_commands.command(name="admin_info", description="Show admin config and your authorization status")
     async def admin_info(self, interaction: discord.Interaction):
         """Show admin configuration information (for debugging)"""
         # Check permissions first

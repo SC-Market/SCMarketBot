@@ -12,14 +12,17 @@ from util.fetch import internal_post, get_user_orders
 
 logger = logging.getLogger('SCMarketBot.OrderCog')
 
-class order(commands.GroupCog):
+class order(commands.GroupCog, group_description="Manage and update your SC Market orders"):
     def __init__(self, bot):
         self.bot = bot
 
-    @app_commands.command(name="status")
+    @app_commands.command(
+        name="status",
+        description="Update an order's status from its thread or by selecting the order",
+    )
     @app_commands.describe(
-        order='The order to update',
-        newstatus='The new status to set the order to',
+        order='Order to update; leave blank to use the current order thread, e.g. Medical Supplies x5',
+        newstatus='New status to set, e.g. Fulfilled',
     )
     @app_commands.choices(
         newstatus=[
@@ -77,10 +80,16 @@ class order(commands.GroupCog):
                 logger.info(f"Successfully updated order status to {newstatus}")
                 if order:
                     await interaction.response.send_message(
-                        f"Successfully updated the status to {newstatus} for order '[{order_payload['t']}](<https://sc-market.space/contract/{order_payload['o']}>)'"
+                        f"Successfully updated the status to {newstatus} for order '[{order_payload['t']}](<https://sc-market.space/contract/{order_payload['o']}>)'\n\n"
+                        f"The customer and the order thread have been notified, and the new status now shows on the order.\n"
+                        f"-# Change it again with /order status · open the order using the link above"
                     )
                 else:
-                    await interaction.response.send_message(f"Successfully updated status for the order")
+                    await interaction.response.send_message(
+                        f"Successfully updated status for the order\n\n"
+                        f"The customer and this order thread have been notified, and the new status now shows on the order.\n"
+                        f"-# Change it again with /order status"
+                    )
 
         except Exception as e:
             logger.error(f"Unexpected error in update_status: {e}")

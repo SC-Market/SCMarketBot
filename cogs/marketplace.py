@@ -206,6 +206,13 @@ class UEXImportView(discord.ui.View):
                             f"View them at [sc-market.space/market/manage](https://sc-market.space/market/manage)",
                 color=0x10b881,
             )
+            embed.add_field(
+                name="What's next",
+                value="Your imported listings are now live on SC Market and buyers can find "
+                      "them through `/search`, `/lookup user`, and `/lookup org`.\n"
+                      "-# Edit prices, stock, or delist any item at https://sc-market.space/market/manage",
+                inline=False,
+            )
             await interaction.followup.send(embed=embed, ephemeral=True)
 
         self.stop()
@@ -276,9 +283,9 @@ class Marketplace(commands.Cog):
 
     import_group = app_commands.Group(name="import", description="Import listings from external platforms")
 
-    @import_group.command(name="uex")
+    @import_group.command(name="uex", description="Import your UEXCorp sell listings onto SC Market")
     @app_commands.describe(
-        username='Your UEX username',
+        username='Your UEXCorp username, e.g. spacetrader',
     )
     async def import_uex(
             self,

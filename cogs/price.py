@@ -16,11 +16,11 @@ class Price(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    @app_commands.command(name="price")
+    @app_commands.command(name="price", description="Quickly update the price of one of your market listings")
     @app_commands.describe(
-        owner='The owner of the listing. Either you or one of your contractors',
-        listing='The listing to reprice',
-        new_price='The new price in aUEC',
+        owner='Listing owner: yourself or a contractor, e.g. My Org Name',
+        listing='The listing to reprice, e.g. Pembroke Armor Set',
+        new_price='New price in aUEC, e.g. 50000',
     )
     async def set_price(
             self,
@@ -60,7 +60,9 @@ class Price(commands.Cog):
         else:
             await interaction.response.send_message(
                 f"Price for [{listing_payload['t']}](<https://sc-market.space/market/{listing_id}>) "
-                f"updated from `{old_price:,}` to `{new_price:,}` aUEC."
+                f"updated from `{old_price:,}` to `{new_price:,}` aUEC.\n"
+                f"Buyers now see the new price on the listing.\n"
+                f"-# Reprice again with /price · adjust stock with /stock set"
             )
 
     @set_price.autocomplete('listing')

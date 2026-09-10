@@ -92,6 +92,14 @@ class CreateListingModal(discord.ui.Modal, title="Create a Listing"):
                 color=0x10b881,
                 url=f"https://sc-market.space/market/{listing_id}" if listing_id else None,
             )
+            embed.add_field(
+                name="What's next",
+                value=(
+                    "Your listing is now live on the market and buyers can find and order it.\n"
+                    "-# Reprice with /price · update quantity with /stock set · view yours with /lookup user"
+                ),
+                inline=False,
+            )
             await interaction.followup.send(embed=embed, ephemeral=True)
 
 
@@ -99,9 +107,9 @@ class Listing(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    @app_commands.command(name="list")
+    @app_commands.command(name="list", description="Create a new market listing via a fill-in form")
     @app_commands.describe(
-        owner='Create listing as yourself or as an org (optional)',
+        owner='List as yourself or an org, e.g. My Org Name (optional)',
     )
     async def create_listing(
             self,

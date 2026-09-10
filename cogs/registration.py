@@ -101,16 +101,22 @@ class Registration(commands.GroupCog, name="register"):
             "Something went wrong with that command. Please try again or contact support.",
         )
 
-    @channel.command(name="contractor")
+    @channel.command(
+        name="contractor",
+        description="Use this channel for your contractor's order-fulfillment threads",
+    )
     @checks.has_permissions(administrator=True)
-    @app_commands.describe(name="The Spectrum ID or name of the contractor")
+    @app_commands.describe(name="The Spectrum ID or name of the contractor, e.g. SCMARKET")
     async def contractor_channel(
         self, interaction: discord.Interaction, name: str
     ):
         """Register a channel as the channel that will house threads for order fulfillment for your contractor. Make sure the bot has permission to see the channel and make private threads there."""
         await self.register(interaction, "channel", "contractor", name)
 
-    @channel.command(name="user")
+    @channel.command(
+        name="user",
+        description="Use this channel for your personal order-fulfillment threads",
+    )
     @checks.has_permissions(administrator=True)
     async def user_channel(self, interaction: discord.Interaction):
         """Register a channel as the channel that will house threads for order fulfillment for your user. Make sure the bot has permission to see the channel and make private threads there."""
@@ -163,9 +169,25 @@ class Registration(commands.GroupCog, name="register"):
                 async with session.post(url, json=payload) as resp:
                     text = await resp.text()
                     if resp.ok:
+                        target = f"the contractor **{name}**" if entity == "contractor" else "you"
+                        if reg_type == "channel":
+                            unlocked = (
+                                f"Order-fulfillment threads for {target} will now be created in this channel."
+                            )
+                        else:
+                            unlocked = (
+                                f"This server is now the official order-fulfillment server for {target}."
+                            )
+                        follow_up = (
+                            f"-# Post alerts to a channel next with /subscribe alerts {name}"
+                            if entity == "contractor"
+                            else "-# Post alerts to a channel next with /subscribe alerts_user"
+                        )
                         await _send_ephemeral(
                             interaction,
-                            f"Successfully registered this {reg_type} for {entity}.",
+                            f"Successfully registered this {reg_type} for {entity}.\n"
+                            f"{unlocked}\n"
+                            f"{follow_up}",
                         )
                         return
                     user_msg = _parse_error_body(text, resp.status)

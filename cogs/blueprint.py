@@ -16,9 +16,9 @@ class Blueprint(commands.GroupCog, group_name="blueprint"):
     def __init__(self, bot):
         self.bot = bot
 
-    @app_commands.command(name="search")
+    @app_commands.command(name="search", description="Search crafting blueprints/recipes by name")
     @app_commands.describe(
-        query="Blueprint name to search for",
+        query="Blueprint name to search for, e.g. Medical Gown",
     )
     async def blueprint_search(
         self,
@@ -62,9 +62,9 @@ class Blueprint(commands.GroupCog, group_name="blueprint"):
         embed.set_footer(text=f"{len(blueprints)} result(s)")
         await interaction.followup.send(embed=embed, ephemeral=True)
 
-    @app_commands.command(name="conversion")
+    @app_commands.command(name="conversion", description="Show a blueprint's full input to output crafting conversion")
     @app_commands.describe(
-        blueprint="Blueprint ID or name (use /blueprint search to find IDs)",
+        blueprint="Blueprint ID or name, e.g. Medical Gown (use /blueprint search to find IDs)",
     )
     async def blueprint_conversion(
         self,
@@ -135,10 +135,10 @@ class Blueprint(commands.GroupCog, group_name="blueprint"):
 
         await interaction.followup.send(embed=embed, ephemeral=True)
 
-    @app_commands.command(name="own")
+    @app_commands.command(name="own", description="Register a blueprint as owned in your inventory")
     @app_commands.describe(
-        blueprint="Blueprint ID or name to register as owned",
-        method="How you acquired it (e.g., mission_reward, crafted, purchased)",
+        blueprint="Blueprint ID or name to register, e.g. Medical Gown",
+        method="How you acquired it, e.g. Crafted (mission_reward, crafted, purchased)",
     )
     @app_commands.choices(method=[
         app_commands.Choice(name="Mission Reward", value="mission_reward"),
@@ -188,11 +188,20 @@ class Blueprint(commands.GroupCog, group_name="blueprint"):
                 description=f"**{name}** added to your owned blueprints.",
                 color=0x10b881,
             )
+            embed.add_field(
+                name="What's next",
+                value=(
+                    "It now shows in `/blueprint inventory` and counts toward your collection total.\n"
+                    "See its recipe with `/blueprint conversion`.\n"
+                    f"-# Undo with /blueprint unown {name}"
+                ),
+                inline=False,
+            )
             await interaction.followup.send(embed=embed, ephemeral=True)
 
-    @app_commands.command(name="unown")
+    @app_commands.command(name="unown", description="Remove a blueprint from your owned inventory")
     @app_commands.describe(
-        blueprint="Blueprint ID or name to remove from owned",
+        blueprint="Blueprint ID or name to remove, e.g. Medical Gown",
     )
     async def blueprint_unown(
         self,
@@ -227,9 +236,14 @@ class Blueprint(commands.GroupCog, group_name="blueprint"):
         if response.get("error"):
             await interaction.followup.send(f"Failed: {response['error']}", ephemeral=True)
         else:
-            await interaction.followup.send("Blueprint removed from your inventory.", ephemeral=True)
+            await interaction.followup.send(
+                "Blueprint removed from your inventory.\n"
+                "It no longer shows in `/blueprint inventory` or counts toward your collection.\n"
+                "-# Re-add it with /blueprint own <name>",
+                ephemeral=True,
+            )
 
-    @app_commands.command(name="inventory")
+    @app_commands.command(name="inventory", description="View the blueprints you own and your collection progress")
     async def blueprint_inventory(self, interaction: discord.Interaction):
         """View your owned blueprints"""
         await interaction.response.defer(ephemeral=True)

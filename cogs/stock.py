@@ -111,7 +111,9 @@ class stock(commands.GroupCog):
                     newquantity = quantity
 
                 await interaction.response.send_message(
-                    f"Stock for [{listing_payload['t']}](<https://sc-market.space/market/{listing_payload['l']}>) has been set from `{listing_payload['q']}` to `{newquantity}`."
+                    f"Stock for [{listing_payload['t']}](<https://sc-market.space/market/{listing_payload['l']}>) has been set from `{listing_payload['q']}` to `{newquantity}`.\n"
+                    f"The listing's available quantity is now updated, so buyers will see `{newquantity}` available.\n"
+                    "-# Check with /stock view"
                 )
 
         except Exception as e:

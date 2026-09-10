@@ -23,6 +23,7 @@ from cogs.watchlist import Watchlist
 from cogs.listing import Listing
 from cogs.marketplace import Marketplace
 from cogs.blueprint import Blueprint
+from cogs.help import Help
 
 from util.config import Config
 from util.result import Result
@@ -59,6 +60,7 @@ class SCMarket(Bot):
         await self.add_cog(Listing(self))
         await self.add_cog(Marketplace(self))
         await self.add_cog(Blueprint(self))
+        await self.add_cog(Help(self))
 
         await self.tree.sync()
 
