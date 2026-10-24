@@ -97,22 +97,18 @@ class stock(commands.GroupCog):
 
             if response.get("error"):
                 logger.warning(f"Backend returned error for stock change: {response['error']}")
-                await interaction.response.send_message(response['error'])
+                await interaction.response.send_message(response['error'], ephemeral=True)
             else:
                 logger.info(f"Successfully updated stock for listing {listing_payload['l']}")
-                
-                # Calculate new quantity
-                newquantity = listing_payload['q']
-                if action == "add":
-                    newquantity += quantity
-                elif action == "sub":
-                    newquantity -= quantity
-                else:
-                    newquantity = quantity
+
+                # The backend reports the authoritative before/after quantities;
+                # the picker's cached quantity can be stale.
+                previous_quantity = response["previous_quantity"]
+                new_quantity = response["quantity"]
 
                 await interaction.response.send_message(
-                    f"Stock for [{listing_payload['t']}](<https://sc-market.space/market/{listing_payload['l']}>) has been set from `{listing_payload['q']}` to `{newquantity}`.\n"
-                    f"The listing's available quantity is now updated, so buyers will see `{newquantity}` available.\n"
+                    f"Stock for [{listing_payload['t']}](<https://sc-market.space/market/{listing_payload['l']}>) has been set from `{previous_quantity}` to `{new_quantity}`.\n"
+                    f"The listing's available quantity is now updated, so buyers will see `{new_quantity}` available.\n"
                     "-# Check with /stock view"
                 )
 

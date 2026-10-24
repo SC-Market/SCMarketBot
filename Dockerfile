@@ -1,4 +1,4 @@
-FROM python:3.11.5-slim
+FROM python:3.11.17-slim-trixie
 RUN apt-get update && apt-get upgrade -y && apt-get autoremove -y
 RUN apt-get install -y git
 COPY requirements.txt ./
