@@ -1,24 +1,20 @@
-from discord import Permissions, Interaction
-from discord.app_commands import MissingPermissions, check
+from discord import Interaction
+from discord.app_commands import MissingPermissions, NoPrivateMessage, check
 
 
-def admin_or_common_server():
-    perms = dict(administrator=True)
-    invalid = perms.keys() - Permissions.VALID_FLAGS.keys()
-    if invalid:
-        raise TypeError(f"Invalid permission(s): {', '.join(invalid)}")
+def guild_manage_channels():
+    """Require a guild context and the invoking member's Manage Channels permission.
+
+    Alert subscriptions are configured per channel, so only members who manage
+    that channel's server may add or remove them. DMs (``guild_id is None``) are
+    rejected outright.
+    """
 
     def predicate(interaction: Interaction) -> bool:
-        if interaction.channel_id == 1072580369251041330:
-            return True
-
-        permissions = interaction.permissions
-
-        missing = [perm for perm, value in perms.items() if getattr(permissions, perm) != value]
-
-        if not missing:
-            return True
-
-        raise MissingPermissions(missing)
+        if interaction.guild_id is None:
+            raise NoPrivateMessage("This command can only be used in a server channel.")
+        if not interaction.permissions.manage_channels:
+            raise MissingPermissions(["manage_channels"])
+        return True
 
     return check(predicate)

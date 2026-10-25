@@ -1,7 +1,8 @@
-git+https://github.com/Soheab/discord-py-paginators.git
-discord.py
-aiohttp
-humanize
-ujson
-boto3
-bugsnag
+# Top-level runtime dependencies, pinned to exact versions (git dep pinned to a commit SHA).
+discord-py-paginators @ git+https://github.com/Soheab/discord-py-paginators.git@8250740eb483f7c75dd0dc6b03a0206720f98f64
+discord.py==2.7.1
+aiohttp==3.14.5
+humanize==4.16.0
+ujson==6.0.0
+boto3==1.43.118
+bugsnag==4.9.2

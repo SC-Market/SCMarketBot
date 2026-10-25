@@ -5,6 +5,7 @@ from discord import app_commands
 import logging
 import aiohttp
 
+from util.checks import guild_manage_channels
 from util.config import Config
 
 logger = logging.getLogger('SCMarketBot.SubscribeCog')
@@ -16,6 +17,16 @@ DISCORD_BACKEND_URL = Config.discord_backend_base()
 class AlertSubscriptions(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
+
+    async def cog_app_command_error(self, interaction: discord.Interaction, error: app_commands.AppCommandError):
+        """Tell the user why a permission check rejected them (other errors fall through to the tree's logger)."""
+        if not isinstance(error, app_commands.CheckFailure):
+            return
+        message = f"❌ {error}"
+        if interaction.response.is_done():
+            await interaction.followup.send(message, ephemeral=True)
+        else:
+            await interaction.response.send_message(message, ephemeral=True)
 
     @commands.Cog.listener()
     async def on_interaction(self, interaction: discord.Interaction):
@@ -82,6 +93,7 @@ class AlertSubscriptions(commands.Cog):
 
     @subscribe_group.command(name="alerts", description="Subscribe this channel to order/offer alerts for an organization")
     @app_commands.describe(org_name="The spectrum ID of the organization")
+    @guild_manage_channels()
     async def subscribe_alerts(self, interaction: discord.Interaction, org_name: str):
         await interaction.response.defer(ephemeral=True)
         try:
@@ -119,6 +131,7 @@ class AlertSubscriptions(commands.Cog):
             await interaction.followup.send("❌ An error occurred.", ephemeral=True)
 
     @subscribe_group.command(name="alerts_user", description="Subscribe this channel to your personal order/offer alerts")
+    @guild_manage_channels()
     async def subscribe_alerts_user(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True)
         try:
@@ -157,15 +170,21 @@ class AlertSubscriptions(commands.Cog):
     unsubscribe_group = app_commands.Group(name="unsubscribe", description="Remove subscriptions")
 
     @unsubscribe_group.command(name="alerts", description="Remove order/offer alert subscription from this channel")
+    @guild_manage_channels()
     async def unsubscribe_alerts(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True)
         try:
             async with aiohttp.ClientSession() as session:
                 async with session.delete(
                     f"{DISCORD_BACKEND_URL}/alert-subscriptions/{interaction.channel_id}",
+                    json={"discord_id": str(interaction.user.id)},
                 ) as resp:
                     if resp.status == 404:
                         await interaction.followup.send("❌ No alert subscription found for this channel.", ephemeral=True)
+                        return
+                    if resp.status == 403:
+                        data = await resp.json()
+                        await interaction.followup.send(f"❌ {data.get('error', 'You cannot remove this subscription.')}", ephemeral=True)
                         return
                     if not resp.ok:
                         await interaction.followup.send("❌ Failed to remove subscription.", ephemeral=True)

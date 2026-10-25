@@ -3,10 +3,20 @@ import aiohttp
 import logging
 import traceback
 from typing import Optional, Dict, Any
+from urllib.parse import quote
 
 from util.config import Config
 
 logger = logging.getLogger('SCMarketBot.Fetch')
+
+
+def _seg(value) -> str:
+    """Percent-encode a value for use as a single URL path segment.
+
+    ``safe=''`` also encodes ``/``, so user input such as ``../admin`` cannot
+    add segments or be normalized into a different route.
+    """
+    return quote(str(value), safe='')
 
 async def public_fetch(url, params=None, session=None):
     """Enhanced public fetch with comprehensive error logging"""
@@ -149,7 +159,7 @@ async def get_user_orders(discord_id, session=None):
     """Enhanced user orders fetch with error logging"""
     try:
         logger.debug(f"Fetching orders for user {discord_id}")
-        response = await internal_fetch(f"/threads/user/{discord_id}/assigned", session=session)
+        response = await internal_fetch(f"/threads/user/{_seg(discord_id)}/assigned", session=session)
         
         if 'orders' in response:
             orders = response['orders']
@@ -169,7 +179,7 @@ async def get_user_listings(discord_id, session=None):
     """Enhanced user listings fetch with error logging"""
     try:
         logger.debug(f"Fetching listings for user {discord_id}")
-        response = await internal_fetch(f"/threads/user/{discord_id}/listings", session=session)
+        response = await internal_fetch(f"/threads/user/{_seg(discord_id)}/listings", session=session)
         
         if 'listings' in response:
             listings = response['listings']
@@ -189,7 +199,7 @@ async def get_org_listings(contractor_id, discord_id, session=None):
     """Enhanced org listings fetch with error logging"""
     try:
         logger.debug(f"Fetching org listings for contractor {contractor_id}, user {discord_id}")
-        response = await internal_fetch(f"/threads/user/{discord_id}/listings/{contractor_id}", session=session)
+        response = await internal_fetch(f"/threads/user/{_seg(discord_id)}/listings/{_seg(contractor_id)}", session=session)
         
         if 'listings' in response:
             listings = response['listings']
@@ -209,7 +219,7 @@ async def get_user_orgs(discord_id, session=None):
     """Enhanced user orgs fetch with error logging"""
     try:
         logger.debug(f"Fetching orgs for user {discord_id}")
-        response = await internal_fetch(f"/threads/user/{discord_id}/contractors", session=session)
+        response = await internal_fetch(f"/threads/user/{_seg(discord_id)}/contractors", session=session)
         
         if 'contractors' in response:
             contractors = response['contractors']
@@ -229,7 +239,7 @@ async def search_users(query, session=None):
     """Enhanced user search with error logging"""
     try:
         logger.debug(f"Searching users with query: {query}")
-        response = await public_fetch(f"/profile/search/{query}", session=session)
+        response = await public_fetch(f"/profile/search/{_seg(query)}", session=session)
         logger.debug(f"User search returned {len(response) if isinstance(response, list) else 'unknown'} results")
         return response
         

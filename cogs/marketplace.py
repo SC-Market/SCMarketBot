@@ -4,6 +4,7 @@ and the /import uex command.
 """
 import logging
 from typing import List
+from urllib.parse import quote
 
 import aiohttp
 import discord
@@ -242,7 +243,7 @@ class Marketplace(commands.Cog):
                 # Fetch listing details for the modal
                 try:
                     result = await public_fetch(
-                        f"/v2/listings/{listing_id}",
+                        f"/v2/listings/{quote(listing_id, safe='')}",
                         session=self.bot.session,
                     )
                     listing_data = result.get('listing', {})
@@ -271,7 +272,7 @@ class Marketplace(commands.Cog):
                 listing_id = parts[1]
                 try:
                     result = await public_fetch(
-                        f"/v2/listings/{listing_id}",
+                        f"/v2/listings/{quote(listing_id, safe='')}",
                         session=self.bot.session,
                     )
                     listing_data = result.get('listing', {})

@@ -1,4 +1,6 @@
 import logging
+import uuid
+from urllib.parse import quote
 
 import discord
 from discord import app_commands
@@ -74,9 +76,10 @@ class Blueprint(commands.GroupCog, group_name="blueprint"):
         """Look up the full input → output conversion for a blueprint"""
         await interaction.response.defer(ephemeral=True)
 
-        # If it looks like a name rather than UUID, search first
-        blueprint_id = blueprint
-        if len(blueprint) != 36 or "-" not in blueprint:
+        # A valid UUID is used as the ID; anything else is treated as a name and searched.
+        try:
+            blueprint_id = str(uuid.UUID(blueprint))
+        except ValueError:
             search = await internal_fetch(
                 "/threads/blueprints/search",
                 params={"text": blueprint, "limit": "1"},
@@ -89,7 +92,7 @@ class Blueprint(commands.GroupCog, group_name="blueprint"):
             blueprint_id = results[0]["blueprint_id"]
 
         response = await internal_fetch(
-            f"/threads/blueprints/conversion/{blueprint_id}",
+            f"/threads/blueprints/conversion/{quote(str(blueprint_id), safe='')}",
             session=self.bot.session,
         )
 
