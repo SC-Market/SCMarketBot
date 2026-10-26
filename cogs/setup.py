@@ -2,13 +2,15 @@
 
 - ``/setup threads [org]``: a private thread with the buyer for each new order.
 - ``/setup alerts [org]``: a post for each new order and offer, with a Claim button.
+- ``/setup contracts [org]``: a post for each new public contract on SC Market.
 - ``/setup webhook``: the steps for a shop webhook (configured on the website).
 - ``/setup status``: what this channel gets.
-- ``/setup remove kind [org]``: stop threads or alerts here.
+- ``/setup remove kind [org]``: stop threads, alerts or the contract feed here.
 
 Discord side: threads, alerts and remove need Manage Channels. SC Market side
 (checked by the backend): an org needs Manage Webhooks for threads and Manage
-Orders or Manage Webhooks for alerts; leaving ``org`` empty means yourself.
+Orders or Manage Webhooks for alerts and the contract feed; leaving ``org``
+empty means yourself.
 """
 import logging
 
@@ -25,6 +27,7 @@ logger = logging.getLogger("SCMarketBot.SetupCog")
 SITE = "https://sc-market.space"
 THREADS = "threads"
 ALERTS = "alerts"
+CONTRACTS = "contracts"
 
 ORG_HELP = "Your org's Spectrum ID, e.g. SCMARKET; leave empty to set it up for yourself"
 REMOVE_ORG_HELP = "The org it was set up for, e.g. SCMARKET; leave empty if it's yours"
@@ -32,8 +35,10 @@ REMOVE_ORG_HELP = "The org it was set up for, e.g. SCMARKET; leave empty if it's
 KIND_CHOICES = [
     app_commands.Choice(name="Order threads", value=THREADS),
     app_commands.Choice(name="Order alerts", value=ALERTS),
+    app_commands.Choice(name="Public contract feed", value=CONTRACTS),
 ]
-KIND_LABELS = {THREADS: "order threads", ALERTS: "order alerts"}
+KIND_LABELS = {THREADS: "order threads", ALERTS: "order alerts", CONTRACTS: "the public contract feed"}
+ALL_KINDS = (THREADS, ALERTS, CONTRACTS)
 
 # What the bot itself needs in a thread channel (forum channels open posts,
 # so they need Send Messages instead of Create Private Threads).
@@ -50,7 +55,7 @@ def missing_bot_permissions(app_permissions, channel_type, kind: str = THREADS) 
     """Bot permissions this channel lacks for ``kind``, as display names."""
     if app_permissions is None:
         return []
-    if kind == ALERTS:
+    if kind in (ALERTS, CONTRACTS):
         needed = ALERT_CHANNEL_PERMS
     elif getattr(channel_type, "name", str(channel_type)) == "forum":
         needed = FORUM_CHANNEL_PERMS
@@ -117,6 +122,16 @@ def alerts_embed(owner_label: str, org) -> discord.Embed:
     return embed
 
 
+def contracts_message(owner_label: str, org) -> str:
+    target = f"**{owner_label}**" if org else "you"
+    return (
+        f"✅ The public contract feed is on in this channel for {target}.\n"
+        "Each new public contract posted on SC Market appears here with its title, kind, payment and "
+        f"cost, and a link to it on {SITE}/contracts.\n"
+        "-# Stop it with `/setup remove` and kind **Public contract feed**."
+    )
+
+
 def webhook_embed() -> discord.Embed:
     embed = discord.Embed(
         title="Set up a webhook",
@@ -156,7 +171,7 @@ def status_embed(setups: list) -> discord.Embed:
         )
     embed = discord.Embed(title="What this channel gets", color=0x2196F3)
     for s in setups[:24]:
-        kinds = [KIND_LABELS[k] for k in (THREADS, ALERTS) if s.get(k)]
+        kinds = [KIND_LABELS[k] for k in ALL_KINDS if s.get(k)]
         if s.get("owner_type") == "shop":
             how = "-# Set on the website in the shop's Settings › Discord."
         elif s.get("owner_type") == "org":
@@ -174,7 +189,7 @@ def status_embed(setups: list) -> discord.Embed:
 class Setup(
     commands.GroupCog,
     group_name="setup",
-    group_description="Choose what SC Market posts in this channel: order threads, order alerts or a webhook",
+    group_description="Choose what SC Market posts here: order threads, order alerts, contracts or a webhook",
 ):
     def __init__(self, bot):
         self.bot = bot
@@ -218,6 +233,24 @@ class Setup(
         )
 
     @app_commands.command(
+        name="contracts",
+        description="Post each new public contract on SC Market here (needs Manage Channels)",
+    )
+    @app_commands.describe(org=ORG_HELP)
+    @guild_manage_channels()
+    async def contracts(self, interaction: discord.Interaction, org: str = None):
+        org = clean_org(org)
+        await interaction.response.defer(ephemeral=True)
+        status, body = await channel_setups.save(CONTRACTS, interaction, org)
+        if status != 200:
+            await interaction.followup.send(channel_setups.error_text(status, body), ephemeral=True)
+            return
+        data = body.get("data") or {}
+        message = contracts_message(data.get("owner_label"), org)
+        message += bot_permission_warning(interaction, CONTRACTS)
+        await interaction.followup.send(message, ephemeral=True)
+
+    @app_commands.command(
         name="webhook",
         description="Show how to post shop events here with a webhook, set up on the website",
     )
@@ -236,16 +269,16 @@ class Setup(
         embed = status_embed(setups)
         warnings = "".join(
             bot_permission_warning(interaction, kind)
-            for kind in (THREADS, ALERTS)
+            for kind in ALL_KINDS
             if any(s.get(kind) for s in setups)
         )
         await interaction.followup.send(warnings.strip() or None, embed=embed, ephemeral=True)
 
     @app_commands.command(
         name="remove",
-        description="Stop order threads or order alerts in this channel (needs Manage Channels)",
+        description="Stop order threads, order alerts or the contract feed in this channel (needs Manage Channels)",
     )
-    @app_commands.describe(kind="What to stop: order threads or order alerts", org=REMOVE_ORG_HELP)
+    @app_commands.describe(kind="What to stop: order threads, order alerts or the public contract feed", org=REMOVE_ORG_HELP)
     @app_commands.choices(kind=KIND_CHOICES)
     @guild_manage_channels()
     async def remove(self, interaction: discord.Interaction, kind: app_commands.Choice[str], org: str = None):

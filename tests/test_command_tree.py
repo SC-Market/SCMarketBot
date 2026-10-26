@@ -14,7 +14,7 @@ from cogs import help as help_module
 from cogs.registry import add_cogs
 
 COMMANDS = {
-    "setup threads", "setup alerts", "setup webhook", "setup status", "setup remove",
+    "setup threads", "setup alerts", "setup contracts", "setup webhook", "setup status", "setup remove",
     "order status",
     "listing create", "listing price", "listing stock", "listing view", "listing import",
     "search",
@@ -29,6 +29,7 @@ TOP_LEVEL = {"setup", "order", "listing", "search", "watchlist", "blueprint", "h
 OPTIONS = {
     "setup threads": ["org"],
     "setup alerts": ["org"],
+    "setup contracts": ["org"],
     "setup webhook": [],
     "setup status": [],
     "setup remove": ["kind", "org"],
@@ -143,9 +144,9 @@ async def test_help_overview_fits_discord_limits_and_starts_with_setup(bot):
 
 
 @pytest.mark.asyncio
-async def test_help_alerts_topic_compares_the_three_mechanisms(bot):
+async def test_help_alerts_topic_compares_the_mechanisms(bot):
     embed = help_module.Help(bot)._detail_embed("alerts")
-    assert [f.name for f in embed.fields] == ["Order threads", "Alerts", "Webhook"]
+    assert [f.name for f in embed.fields] == ["Order threads", "Alerts", "Public contract feed", "Webhook"]
     assert "Manage Channels" in embed.fields[0].value
     assert "/setup threads" in embed.fields[0].value and "/setup alerts" in embed.fields[1].value
     assert len(embed) <= 6000
@@ -155,7 +156,7 @@ async def test_help_alerts_topic_compares_the_three_mechanisms(bot):
 async def test_help_detail_lists_subcommands_with_options(bot):
     embed = help_module.Help(bot)._detail_embed("setup")
     assert {f.name for f in embed.fields} == {
-        "/setup threads", "/setup alerts", "/setup webhook", "/setup status", "/setup remove",
+        "/setup threads", "/setup alerts", "/setup contracts", "/setup webhook", "/setup status", "/setup remove",
     }
     remove = next(f for f in embed.fields if f.name == "/setup remove")
     assert "`kind` (required)" in remove.value and "`org`" in remove.value

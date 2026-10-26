@@ -105,6 +105,15 @@ def alerts_embed() -> discord.Embed:
         inline=False,
     )
     embed.add_field(
+        name="Public contract feed",
+        value=(
+            "A post for each new public contract anyone opens on SC Market (title, kind, payment, cost "
+            "and a link). Set up with `/setup contracts`.\n"
+            "-# Needs: Manage Channels in Discord; for an org, its Manage Orders or Manage Webhooks permission."
+        ),
+        inline=False,
+    )
+    embed.add_field(
         name="Webhook",
         value=(
             "A message for the shop events you choose (order created or assigned, status change, review, "

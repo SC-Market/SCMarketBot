@@ -1,4 +1,4 @@
-"""/setup threads|alerts|webhook|status|remove: permissions, backend calls and replies."""
+"""/setup threads|alerts|contracts|webhook|status|remove: permissions, backend calls and replies."""
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -10,7 +10,7 @@ from cogs import setup as setup_cog
 from util import channel_setups
 
 Setup = setup_cog.Setup
-GATED = [Setup.threads, Setup.alerts, Setup.remove]
+GATED = [Setup.threads, Setup.alerts, Setup.contracts, Setup.remove]
 
 
 def _interaction(guild_id=111, app_permissions=None, channel_type=discord.ChannelType.text, **perms):
@@ -228,3 +228,22 @@ async def test_request_reports_an_unreachable_backend():
     with patch.object(channel_setups.aiohttp, "ClientSession", return_value=session_cm):
         status, body = await channel_setups.request("GET", "/1")
     assert status == 0 and body["error"] == channel_setups.UNREACHABLE
+
+
+@pytest.mark.asyncio
+async def test_contracts_feed_saves_the_contracts_kind():
+    interaction = _interaction(manage_channels=True, app_permissions=ALL_BOT_PERMS)
+    with _backend(200, {"data": {"owner_label": "SC Market (SCMARKET)"}}) as req:
+        await Setup.contracts.callback(_cog(), interaction, "SCMARKET")
+    assert req.await_args.args[2]["kind"] == "contracts"
+    message = interaction.followup.send.await_args.args[0]
+    assert "public contract feed is on" in message
+    assert "**SC Market (SCMARKET)**" in message
+    assert "missing" not in message
+
+
+def test_status_lists_the_contract_feed():
+    embed = setup_cog.status_embed(
+        [{"owner_type": "org", "owner_label": "SC Market (SCMARKET)", "spectrum_id": "SCMARKET", "contracts": True}]
+    )
+    assert "public contract feed" in embed.fields[0].value
