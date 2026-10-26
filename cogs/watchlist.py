@@ -1,12 +1,32 @@
 import logging
+import re
 
 import discord
 from discord import app_commands
 from discord.ext import commands
 
-from util.fetch import internal_post, internal_fetch
+from util.fetch import internal_post, internal_fetch, public_fetch
 
 logger = logging.getLogger('SCMarketBot.WatchlistCog')
+
+# The `query` autocomplete offers game items with their id as the value, so a
+# picked item arrives as a UUID; anything else is free text typed by the user.
+_UUID_RE = re.compile(r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$', re.IGNORECASE)
+
+
+def watch_request(discord_id: str, query: str, max_price: int) -> dict:
+    """Body for POST /threads/watchlist/add.
+
+    A picked game item is sent as ``game_item_id`` (the alert then matches that
+    exact item); free text is sent as ``query`` (matched as a phrase in
+    listing titles).
+    """
+    body = {"discord_id": discord_id, "max_price": max_price}
+    if _UUID_RE.match(query.strip()):
+        body["game_item_id"] = query.strip()
+    else:
+        body["query"] = query
+    return body
 
 
 class Watchlist(commands.GroupCog, group_name="watchlist", group_description="Get a DM when an item you want is listed at or below your price"):
@@ -15,8 +35,8 @@ class Watchlist(commands.GroupCog, group_name="watchlist", group_description="Ge
 
     @app_commands.command(name="add", description="Watch an item: get a DM when it's listed at or below your target price")
     @app_commands.describe(
-        query='Item name to watch for, e.g. Medical Supplies',
-        max_price='Your target price in aUEC; you get a DM at or below it, e.g. 25000',
+        query='Pick an item to watch exactly it, or type words to match in titles, e.g. Medical Supplies',
+        max_price='Your target price in aUEC; you get an alert at or below it, e.g. 25000',
     )
     async def watchlist_add(
             self,
@@ -33,26 +53,27 @@ class Watchlist(commands.GroupCog, group_name="watchlist", group_description="Ge
 
         response = await internal_post(
             "/threads/watchlist/add",
-            json={
-                "discord_id": str(interaction.user.id),
-                "query": query,
-                "max_price": max_price,
-            },
+            json=watch_request(str(interaction.user.id), query, max_price),
             session=self.bot.session,
         )
 
         if response.get("error"):
             await interaction.followup.send(f"❌ Couldn't add it to your watchlist: {response['error']}", ephemeral=True)
         else:
+            item = response.get("item") or {}
+            name = item.get("query") or query
+            kind = "this exact item" if item.get("game_item_id") else "listings with that name in the title"
             embed = discord.Embed(
                 title="Watchlist Updated",
-                description=f"You'll be notified when **{query}** is listed at or below **{max_price:,} aUEC**.",
+                description=f"You'll be alerted when **{name}** is listed at or below **{max_price:,} aUEC** "
+                            f"(matching {kind}).",
                 color=0x10b881,
             )
             embed.add_field(
                 name="What's next",
-                value="From now on you'll get a DM whenever a matching listing drops to your target "
-                      "price or comes back in stock.\n"
+                value="When a public listing hits your target price you get an alert: a DM here, plus a "
+                      "site notification and push; email is off until you turn it on. Choose channels in "
+                      "Settings → Price Alerts on sc-market.space.\n"
                       "-# Stop alerts with /watchlist remove · see everything you watch with /watchlist list",
                 inline=False,
             )
@@ -120,6 +141,34 @@ class Watchlist(commands.GroupCog, group_name="watchlist", group_description="Ge
 
         embed.set_footer(text=f"{len(items)} item(s) watched")
         await interaction.followup.send(embed=embed, ephemeral=True)
+
+    @watchlist_add.autocomplete('query')
+    async def watchlist_add_query_autocomplete(
+            self,
+            interaction: discord.Interaction,
+            current: str,
+    ):
+        """Suggest game items; picking one watches that exact item."""
+        if len(current.strip()) < 2:
+            return []
+        try:
+            items = await public_fetch(
+                "/v2/game-items/search",
+                params={"query": current, "limit": "25"},
+                session=self.bot.session,
+            )
+            if not isinstance(items, list):
+                return []
+            return [
+                app_commands.Choice(
+                    name=(f"{item['name']} ({item['type']})" if item.get('type') else item['name'])[:100],
+                    value=item['id'],
+                )
+                for item in items
+            ][:25]
+        except Exception as e:
+            logger.error(f"Error in watchlist item autocomplete: {e}")
+            return []
 
     @watchlist_remove.autocomplete('item')
     async def watchlist_item_autocomplete(
