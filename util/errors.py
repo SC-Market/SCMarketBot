@@ -85,8 +85,8 @@ async def on_app_command_error(interaction: discord.Interaction, error: app_comm
                 root if isinstance(root, Exception) else Exception(str(root)),
                 context=f"/{command}" if command else "app command",
                 meta_data={
+                    # No user id: error reports are anonymous (SC Market privacy policy).
                     "discord": {
-                        "user_id": str(interaction.user.id),
                         "guild_id": str(interaction.guild_id) if interaction.guild_id else None,
                         "command": command,
                     }

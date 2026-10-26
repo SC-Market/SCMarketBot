@@ -115,8 +115,14 @@ class SCMarket(Bot):
                 bugsnag.notify(
                     err,
                     context=f"Discord event {event_method}",
+                    # Argument types only: the reprs of Discord objects carry
+                    # user names, ids and message content, and error reports
+                    # are anonymous (SC Market privacy policy).
                     meta_data={
-                        "event": {"args": repr(args), "kwargs": repr(kwargs)},
+                        "event": {
+                            "args": [type(a).__name__ for a in args],
+                            "kwargs": sorted(kwargs),
+                        },
                     },
                 )
 
