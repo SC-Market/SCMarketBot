@@ -1,7 +1,7 @@
 """User input must never add path segments to backend URLs.
 
 yarl normalizes ``..`` in request paths, so an unquoted value like
-``../../register/user`` interpolated into ``/threads/blueprints/conversion/{id}``
+``../../channel-setups/1`` interpolated into ``/threads/blueprints/conversion/{id}``
 would reach a different internal route.
 """
 from types import SimpleNamespace
@@ -12,7 +12,7 @@ import pytest
 from cogs import blueprint as blueprint_module
 from util import fetch
 
-TRAVERSAL = "../../../alert-subscriptions/1234567"  # 36 chars, contains "-"
+TRAVERSAL = "../../../channel-setups/123456789012"  # 36 chars, contains "-"
 VALID_ID = "0b2f6a3e-1c4d-4e5f-8a9b-0c1d2e3f4a5b"
 
 
@@ -53,14 +53,24 @@ async def test_conversion_quotes_search_result_id():
 
 
 @pytest.mark.asyncio
-async def test_search_users_quotes_query():
-    with patch.object(fetch, "public_fetch", AsyncMock(return_value=[])) as pf:
-        await fetch.search_users("../../admin/users?x=1#y")
-    assert pf.await_args.args[0] == "/profile/search/..%2F..%2Fadmin%2Fusers%3Fx%3D1%23y"
+async def test_seller_search_sends_text_as_a_query_parameter():
+    with patch.object(fetch, "public_fetch", AsyncMock(return_value={"shops": []})) as pf:
+        assert await fetch.search_shops("../../admin/users?x=1#y") == []
+    assert pf.await_args.args[0] == "/v2/shops"
+    assert pf.await_args.kwargs["params"]["search"] == "../../admin/users?x=1#y"
+
+
+@pytest.mark.asyncio
+async def test_channel_setup_paths_quote_the_channel():
+    from util import channel_setups
+
+    with patch.object(channel_setups, "request", AsyncMock(return_value=(200, {}))) as req:
+        await channel_setups.status("../123")
+    assert req.await_args.args == ("GET", "/..%2F123")
 
 
 @pytest.mark.asyncio
 async def test_org_listings_quotes_contractor_id():
     with patch.object(fetch, "internal_fetch", AsyncMock(return_value={"listings": []})) as inf:
-        await fetch.get_org_listings("../../../register/user", 42)
-    assert inf.await_args.args[0] == "/threads/user/42/listings/..%2F..%2F..%2Fregister%2Fuser"
+        await fetch.get_org_listings("../../../channel-setups/1", 42)
+    assert inf.await_args.args[0] == "/threads/user/42/listings/..%2F..%2F..%2Fchannel-setups%2F1"

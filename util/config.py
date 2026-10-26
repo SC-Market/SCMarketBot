@@ -17,8 +17,8 @@ class Config:
 
     # Discord settings
     DISCORD_API_KEY = os.environ.get("DISCORD_API_KEY")
-    # Internal discord_app base URL (server.ts) — serves /register, /threads,
-    # /claim, /alert-subscriptions.
+    # Internal discord_app base URL (server.ts) — serves /channel-setups, /threads
+    # and /claim.
     #
     # PINNED to localhost:8081 (was env-driven). The deployed bot's
     # DISCORD_BACKEND_URL pointed at the wrong server (the main API on :8080),

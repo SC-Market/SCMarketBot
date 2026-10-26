@@ -235,35 +235,12 @@ async def get_user_orgs(discord_id, session=None):
         raise
 
 
-async def search_users(query, session=None):
-    """Enhanced user search with error logging"""
-    try:
-        logger.debug(f"Searching users with query: {query}")
-        response = await public_fetch(f"/profile/search/{_seg(query)}", session=session)
-        logger.debug(f"User search returned {len(response) if isinstance(response, list) else 'unknown'} results")
-        return response
-        
-    except Exception as e:
-        logger.error(f"Failed to search users with query '{query}': {e}")
-        logger.error(f"Error type: {type(e).__name__}")
-        raise
-
-
-async def search_orgs(query, session=None):
-    """Enhanced org search with error logging"""
-    try:
-        logger.debug(f"Searching orgs with query: {query}")
-        response = await public_fetch(f"/contractors", params=dict(query=query, sorting='name'), session=session)
-        
-        if 'items' in response:
-            items = response['items']
-            logger.debug(f"Org search returned {len(items)} results")
-            return items
-        else:
-            logger.debug(f"Unexpected response format for org search: {response}")
-            return response
-            
-    except Exception as e:
-        logger.error(f"Failed to search orgs with query '{query}': {e}")
-        logger.error(f"Error type: {type(e).__name__}")
-        raise
+async def search_shops(query, session=None):
+    """Active shops whose name or slug contains ``query`` (the /search seller picker)."""
+    response = await public_fetch(
+        "/v2/shops",
+        params=dict(search=query or "", sort_by="name", sort_order="asc", page_size=25),
+        session=session,
+    )
+    shops = response.get("shops") if isinstance(response, dict) else None
+    return shops if isinstance(shops, list) else []

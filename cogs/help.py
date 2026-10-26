@@ -30,10 +30,10 @@ HIDDEN = {"admin"}
 
 # Top-level command -> area, in the order the areas are shown.
 AREAS = {
-    "Set up": ["setup", "register", "subscribe", "unsubscribe", "help"],
+    "Set up": ["setup", "help"],
     "Orders": ["order"],
-    "Sell": ["list", "stock", "price", "import"],
-    "Buy and browse": ["search", "lookup", "watchlist"],
+    "Sell": ["listing"],
+    "Buy and browse": ["search", "watchlist"],
     "Crafting": ["blueprint"],
 }
 
@@ -43,9 +43,9 @@ SETUP_STEPS = (
     "**Get started in 3 steps**\n"
     "1. **Link your Discord** on sc-market.space (Settings). The bot knows you by your Discord account.\n"
     f"2. **[Add the bot]({BOT_INVITE})** to your server.\n"
-    "3. **Run `/setup` in the channel you want to use** and pick what it should get: "
-    "order threads, order alerts, or a webhook. For an org, fill in its Spectrum ID.\n"
-    "-# Not sure which? `/help alerts` compares them."
+    "3. **In the channel you want to use, run `/setup threads` or `/setup alerts`** "
+    "(or `/setup webhook` for the website's webhook steps). For an org, fill in `org` with its Spectrum ID.\n"
+    "-# Not sure which? `/help alerts` compares them. `/setup status` shows what a channel gets."
 )
 
 
@@ -80,7 +80,7 @@ def alerts_embed() -> discord.Embed:
         title="Order threads, alerts or webhooks?",
         description=(
             "Three ways to hear about orders in Discord. They work side by side; most org shops use "
-            "threads for talking to buyers plus alerts in a staff channel. Set any of them up with `/setup`."
+            "threads for talking to buyers plus alerts in a staff channel."
         ),
         color=EMBED_COLOR,
     )
@@ -88,9 +88,9 @@ def alerts_embed() -> discord.Embed:
         name="Order threads",
         value=(
             "A private thread per order or offer, with the buyer and the assigned seller added. "
-            "Messages sync with the order chat on the site, and `/order status` works inside it.\n"
-            "-# Needs: Administrator in Discord; for an org, its Manage Webhooks permission on SC Market. "
-            "Same as /register channel."
+            "Messages sync with the order chat on the site, and `/order status` works inside it. "
+            "Each shop, org or member has one thread channel. Set up with `/setup threads`.\n"
+            "-# Needs: Manage Channels in Discord; for an org, its Manage Webhooks permission on SC Market."
         ),
         inline=False,
     )
@@ -99,9 +99,8 @@ def alerts_embed() -> discord.Embed:
         value=(
             "A post in this channel for each new unassigned org order and each new offer, with a **Claim** "
             "button that assigns it to whoever clicks (needs the org's Claim Orders permission). "
-            "Personal alerts show offers sent to you, without a Claim button.\n"
-            "-# Needs: Manage Channels in Discord; for an org, its Manage Orders or Manage Webhooks permission. "
-            "Same as /subscribe alerts."
+            "Personal alerts show offers sent to you, without a Claim button. Set up with `/setup alerts`.\n"
+            "-# Needs: Manage Channels in Discord; for an org, its Manage Orders or Manage Webhooks permission."
         ),
         inline=False,
     )
@@ -109,7 +108,8 @@ def alerts_embed() -> discord.Embed:
         name="Webhook",
         value=(
             "A message for the shop events you choose (order created or assigned, status change, review, "
-            "comment, bid). No buttons, no threads. Set it up in your shop's Settings on the website.\n"
+            "comment, bid). No buttons, no threads. Set it up in your shop's Settings on the website; "
+            "`/setup webhook` shows the steps.\n"
             "-# Needs: Manage Webhooks in Discord to create the URL."
         ),
         inline=False,

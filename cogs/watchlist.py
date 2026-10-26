@@ -9,14 +9,14 @@ from util.fetch import internal_post, internal_fetch
 logger = logging.getLogger('SCMarketBot.WatchlistCog')
 
 
-class Watchlist(commands.GroupCog, group_name="watchlist", group_description="Track item prices and get alerts when they drop"):
+class Watchlist(commands.GroupCog, group_name="watchlist", group_description="Get a DM when an item you want is listed at or below your price"):
     def __init__(self, bot):
         self.bot = bot
 
-    @app_commands.command(name="add", description="Watch an item and get alerted when it hits your target price")
+    @app_commands.command(name="add", description="Watch an item: get a DM when it's listed at or below your target price")
     @app_commands.describe(
-        query='Item name to watch, e.g. Medical Supplies',
-        max_price='Alert when the price is at or below this amount in aUEC, e.g. 25000',
+        query='Item name to watch for, e.g. Medical Supplies',
+        max_price='Your target price in aUEC; you get a DM at or below it, e.g. 25000',
     )
     async def watchlist_add(
             self,
@@ -58,7 +58,7 @@ class Watchlist(commands.GroupCog, group_name="watchlist", group_description="Tr
             )
             await interaction.followup.send(embed=embed, ephemeral=True)
 
-    @app_commands.command(name="remove", description="Stop watching an item and cancel its price alerts")
+    @app_commands.command(name="remove", description="Stop watching an item, so you get no more DMs for it")
     @app_commands.describe(
         item='Watchlist item to remove; pick from the list, e.g. Medical Supplies (≤ 25,000 aUEC)',
     )
@@ -88,7 +88,7 @@ class Watchlist(commands.GroupCog, group_name="watchlist", group_description="Tr
                 ephemeral=True,
             )
 
-    @app_commands.command(name="list", description="View the items on your watchlist and their price alerts")
+    @app_commands.command(name="list", description="Show the items you watch and their target prices")
     async def watchlist_list(self, interaction: discord.Interaction):
         """View your current watchlist"""
         await interaction.response.defer(ephemeral=True)

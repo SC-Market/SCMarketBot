@@ -1,32 +1,24 @@
 """Every cog the bot loads, in one list, so main.py and the tests agree."""
 from cogs.admin import Admin
 from cogs.blueprint import Blueprint
+from cogs.claims import Claims
 from cogs.help import Help
 from cogs.listing import Listing
-from cogs.lookup import Lookup
-from cogs.marketplace import Marketplace
 from cogs.order import order
-from cogs.price import Price
-from cogs.registration import Registration
+from cogs.search import Search
 from cogs.setup import Setup
-from cogs.stock import stock
-from cogs.subscribe import AlertSubscriptions
 from cogs.watchlist import Watchlist
 
 COGS = [
-    Registration,
     Setup,
-    Admin,
-    Lookup,
+    Claims,
     order,
-    stock,
-    AlertSubscriptions,
-    Price,
-    Watchlist,
     Listing,
-    Marketplace,
+    Search,
+    Watchlist,
     Blueprint,
     Help,
+    Admin,
 ]
 
 

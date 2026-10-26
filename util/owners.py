@@ -1,4 +1,4 @@
-"""The shared "owner" picker used by /stock, /price and /list.
+"""The shared "owner" picker used by /listing create, price, stock and view.
 
 The owner option is either you ("Me") or one of your orgs. Autocomplete sends a
 small JSON payload; users who type instead of picking send plain text. Both are

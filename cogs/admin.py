@@ -5,6 +5,12 @@ import logging
 
 logger = logging.getLogger('SCMarketBot.AdminCog')
 
+# Staff only. No staff server is configured, so instead of a guild-only
+# registration the group is hidden from everyone without Administrator (server
+# admins can still see it, and the user check below refuses them), and it
+# never shows in DMs.
+@app_commands.default_permissions(administrator=True)
+@app_commands.guild_only()
 class Admin(commands.GroupCog, group_description="Bot maintenance tools (SC Market staff only)"):
     def __init__(self, bot):
         self.bot = bot

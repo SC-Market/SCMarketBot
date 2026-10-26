@@ -3,11 +3,7 @@ from discord.app_commands import MissingPermissions, NoPrivateMessage, check
 
 
 def guild_permissions_failure(interaction: Interaction, **perms: bool):
-    """The error to raise if ``interaction`` lacks ``perms`` in a guild, else None.
-
-    Shared by the decorators below and by /setup, which picks the permission at
-    run time from the option the member chose.
-    """
+    """The error to raise if ``interaction`` lacks ``perms`` in a guild, else None."""
     if interaction.guild_id is None:
         return NoPrivateMessage("This command can only be used in a server channel.")
     have = interaction.permissions
@@ -35,12 +31,12 @@ def require_guild_permissions(**perms: bool):
 def guild_manage_channels():
     """Require a guild context and the invoking member's Manage Channels permission.
 
-    Alert subscriptions are configured per channel, so only members who manage
-    that channel's server may add or remove them.
+    Order threads and alerts are set up per channel, so only members who manage
+    the server's channels may add or remove them.
     """
     return require_guild_permissions(manage_channels=True)
 
 
-def guild_administrator():
-    """Require a guild context and Administrator (used by /register)."""
-    return require_guild_permissions(administrator=True)
+def guild_only():
+    """Require a guild context (no permission needed)."""
+    return require_guild_permissions()
