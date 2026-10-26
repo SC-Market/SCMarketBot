@@ -434,8 +434,9 @@ class DiscordSQSManager:
                     await self._attempt_restart(queue_name, "Consumer task unhealthy")
                 
                 # Check for long periods without messages
+                # An idle queue is normal (orders are infrequent), so this is not a warning.
                 if sqs_health and sqs_health.get('time_since_last_message', 0) > 900:  # 15 minutes
-                    logger.warning(f"Queue {queue_name} has not received messages for {sqs_health['time_since_last_message']:.1f} seconds")
+                    logger.debug(f"Queue {queue_name} has not received messages for {sqs_health['time_since_last_message']:.1f} seconds")
                 
                 # Check for high error rates
                 if sqs_health and sqs_health.get('error_count', 0) > 10:

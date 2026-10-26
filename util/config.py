@@ -44,13 +44,6 @@ class Config:
     DISCORD_QUEUE_URL = os.environ.get('DISCORD_QUEUE_URL', 'https://sqs.us-east-2.amazonaws.com/272095582125/DiscordQueuesStack-discord-queue')
     BACKEND_QUEUE_URL = os.environ.get('BACKEND_QUEUE_URL', 'https://sqs.us-east-2.amazonaws.com/272095582125/DiscordQueuesStack-backend-queue')
     
-    # Legacy SQS Queue names (for backward compatibility)
-    SQS_QUEUES = {
-        'order_placed': os.environ.get('SQS_ORDER_PLACED_QUEUE', 'order-placed-queue'),
-        'order_assigned': os.environ.get('SQS_ORDER_ASSIGNED_QUEUE', 'order-assigned-queue'),
-        'order_status_updated': os.environ.get('SQS_ORDER_STATUS_UPDATED_QUEUE', 'order-status-updated-queue')
-    }
-    
     # SQS Consumer settings
     SQS_CONSUMER_SETTINGS = {
         'max_messages': int(os.environ.get('SQS_MAX_MESSAGES', '10')),
@@ -60,7 +53,6 @@ class Config:
     
     # Feature flags
     ENABLE_SQS = os.environ.get('ENABLE_SQS', 'true').lower() == 'true'
-    ENABLE_DISCORD_QUEUE = os.environ.get('ENABLE_DISCORD_QUEUE', 'true').lower() == 'true'
     
     @classmethod
     def validate(cls) -> Dict[str, Any]:
@@ -87,13 +79,3 @@ class Config:
         if not cls.DISCORD_BACKEND_URL:
             raise RuntimeError("DISCORD_BACKEND_URL is not set")
         return cls.DISCORD_BACKEND_URL
-
-    @classmethod
-    def get_sqs_queue_name(cls, queue_type: str) -> str:
-        """Get the SQS queue name for a specific type"""
-        return cls.SQS_QUEUES.get(queue_type, f'{queue_type}-queue')
-    
-    @classmethod
-    def is_production(cls) -> bool:
-        """Check if running in production environment"""
-        return os.environ.get('ENVIRONMENT', 'development').lower() == 'production'

@@ -8,11 +8,12 @@ import ujson
 from discord import app_commands
 from discord.ext import commands
 
+from util.errors import send_ephemeral
 from util.fetch import internal_post, get_user_orders
 
 logger = logging.getLogger('SCMarketBot.OrderCog')
 
-class order(commands.GroupCog, group_description="Manage and update your SC Market orders"):
+class order(commands.GroupCog, group_description="Update the orders assigned to you or your org"):
     def __init__(self, bot):
         self.bot = bot
 
@@ -52,7 +53,9 @@ class order(commands.GroupCog, group_description="Manage and update your SC Mark
                                                    session=self.bot.session)
                 else:
                     logger.debug(f"User {interaction.user.id} tried to update status outside of thread")
-                    await interaction.response.send_message("No order in this channel. Please select an order to update.")
+                    await interaction.response.send_message(
+                        "❌ This isn't an order thread, so pick the order in the `order` option.", ephemeral=True
+                    )
                     return
             else:
                 try:
@@ -70,12 +73,14 @@ class order(commands.GroupCog, group_description="Manage and update your SC Mark
                 except json.JSONDecodeError as e:
                     logger.error(f"Failed to parse order JSON: {e}")
                     logger.error(f"Raw order string: {order}")
-                    await interaction.response.send_message("Invalid order format. Please try again.", ephemeral=True)
+                    await interaction.response.send_message(
+                        "❌ Pick the order from the suggestions list instead of typing it.", ephemeral=True
+                    )
                     return
 
             if response.get("error"):
                 logger.warning(f"Backend returned error for status update: {response['error']}")
-                await interaction.response.send_message(response['error'])
+                await interaction.response.send_message(f"❌ {response['error']}", ephemeral=True)
             else:
                 logger.info(f"Successfully updated order status to {newstatus}")
                 if order:
@@ -97,7 +102,7 @@ class order(commands.GroupCog, group_description="Manage and update your SC Mark
             logger.error(f"User: {interaction.user.id}, Status: {newstatus}, Order: {order}")
             logger.error(f"Full traceback: {traceback.format_exc()}")
             
-            await interaction.response.send_message("An error occurred while updating the order status. Please try again or contact support if the issue persists.", ephemeral=True)
+            await send_ephemeral(interaction, "❌ Couldn't update the order status. Please try again in a moment.")
 
     @update_status.autocomplete('order')
     async def update_status_order_autocomplete(

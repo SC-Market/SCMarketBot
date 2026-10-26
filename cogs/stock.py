@@ -8,20 +8,22 @@ import ujson
 from discord import app_commands
 from discord.ext import commands
 
-from util.fetch import internal_post, get_user_listings, get_user_orgs, get_org_listings
+from util.errors import send_ephemeral
+from util.fetch import internal_post, get_user_listings, get_org_listings
 from util.listings import display_listings_compact
+from util.owners import OWNER_HELP, owner_autocomplete, parse_owner
 
 logger = logging.getLogger('SCMarketBot.StockCog')
 
-class stock(commands.GroupCog):
+class stock(commands.GroupCog, group_description="Change how many of an item your listings show as available"):
     def __init__(self, bot):
         self.bot = bot
 
-    @app_commands.command(name="set")
+    @app_commands.command(name="set", description="Set a listing's available quantity to an exact number")
     @app_commands.describe(
-        owner='The owner of the listing you want to update. Either you or one of your contractors',
-        listing='The listing to modify',
-        quantity='The new quantity to set for the listing',
+        owner=OWNER_HELP,
+        listing='The listing to change; pick from the list, e.g. Pembroke Armor Set',
+        quantity='New available quantity, e.g. 10',
     )
     async def set_stock(
             self,
@@ -33,11 +35,11 @@ class stock(commands.GroupCog):
         """Set the stock quantity for a given market listing"""
         await self.handle_stock_change(interaction, 'set', owner, listing, quantity)
 
-    @app_commands.command(name="add")
+    @app_commands.command(name="add", description="Add to a listing's available quantity (e.g. after restocking)")
     @app_commands.describe(
-        owner='The owner of the listing you want to update. Either you or one of your contractors',
-        listing='The listing to modify',
-        quantity='The quantity to add to the listings stock',
+        owner=OWNER_HELP,
+        listing='The listing to change; pick from the list, e.g. Pembroke Armor Set',
+        quantity='How many to add, e.g. 5',
     )
     async def add_stock(
             self,
@@ -49,11 +51,11 @@ class stock(commands.GroupCog):
         """Add to the stock quantity for a given market listing"""
         await self.handle_stock_change(interaction, 'add', owner, listing, quantity)
 
-    @app_commands.command(name="sub")
+    @app_commands.command(name="sub", description="Subtract from a listing's available quantity (e.g. after a sale off-site)")
     @app_commands.describe(
-        owner='The owner of the listing you want to update. Either you or one of your contractors',
-        listing='The listing to modify',
-        quantity='The quantity to subtract from the listings stock',
+        owner=OWNER_HELP,
+        listing='The listing to change; pick from the list, e.g. Pembroke Armor Set',
+        quantity='How many to remove, e.g. 2',
     )
     async def sub_stock(
             self,
@@ -78,7 +80,9 @@ class stock(commands.GroupCog):
             except json.JSONDecodeError as e:
                 logger.error(f"Failed to parse listing JSON: {e}")
                 logger.error(f"Raw listing string: {listing}")
-                await interaction.response.send_message("Invalid listing format. Please try again.", ephemeral=True)
+                await interaction.response.send_message(
+                    "❌ Pick the listing from the suggestions list instead of typing it.", ephemeral=True
+                )
                 return
             
             payload = {
@@ -97,7 +101,7 @@ class stock(commands.GroupCog):
 
             if response.get("error"):
                 logger.warning(f"Backend returned error for stock change: {response['error']}")
-                await interaction.response.send_message(response['error'], ephemeral=True)
+                await interaction.response.send_message(f"❌ {response['error']}", ephemeral=True)
             else:
                 logger.info(f"Successfully updated stock for listing {listing_payload['l']}")
 
@@ -107,9 +111,9 @@ class stock(commands.GroupCog):
                 new_quantity = response["quantity"]
 
                 await interaction.response.send_message(
-                    f"Stock for [{listing_payload['t']}](<https://sc-market.space/market/{listing_payload['l']}>) has been set from `{previous_quantity}` to `{new_quantity}`.\n"
+                    f"Stock for [{listing_payload['t']}](<https://sc-market.space/market/{listing_payload['l']}>) changed from `{previous_quantity}` to `{new_quantity}`.\n"
                     f"The listing's available quantity is now updated, so buyers will see `{new_quantity}` available.\n"
-                    "-# Check with /stock view"
+                    "-# Check all your stock with /stock view"
                 )
 
         except Exception as e:
@@ -118,11 +122,11 @@ class stock(commands.GroupCog):
             logger.error(f"User: {interaction.user.id}, Action: {action}, Owner: {owner}, Listing: {listing}, Quantity: {quantity}")
             logger.error(f"Full traceback: {traceback.format_exc()}")
             
-            await interaction.response.send_message("An error occurred while updating the stock. Please try again or contact support if the issue persists.", ephemeral=True)
+            await send_ephemeral(interaction, "❌ Couldn't update the stock. Please try again in a moment.")
 
-    @app_commands.command(name="view")
+    @app_commands.command(name="view", description="Show your listings with their available quantity and price")
     @app_commands.describe(
-        owner='The owner of the listing you want to update. Either you or one of your contractors',
+        owner='Whose listings to show: Me (default) or one of your orgs',
     )
     async def view_stock(
             self,
@@ -133,24 +137,17 @@ class stock(commands.GroupCog):
         logger.info(f"Stock view requested: user={interaction.user.id}, owner={owner}")
         
         try:
-            if owner and interaction.namespace.owner != "_ME":
-                try:
-                    owner_payload = json.loads(owner)
-                    logger.debug(f"Fetching org listings for contractor {owner_payload['s']}")
-                    listings = await get_org_listings(owner_payload['s'], interaction.user.id,
-                                                      session=self.bot.session)
-                except json.JSONDecodeError as e:
-                    logger.error(f"Failed to parse owner JSON: {e}")
-                    logger.error(f"Raw owner string: {owner}")
-                    await interaction.response.send_message("Invalid owner format. Please try again.", ephemeral=True)
-                    return
+            spectrum_id = parse_owner(owner)
+            if spectrum_id:
+                listings = await get_org_listings(spectrum_id, interaction.user.id, session=self.bot.session)
             else:
-                logger.debug(f"Fetching user listings for {interaction.user.id}")
                 listings = await get_user_listings(interaction.user.id, session=self.bot.session)
 
             if not listings:
                 logger.debug(f"No listings found for user {interaction.user.id}")
-                await interaction.response.send_message("No listings to display", ephemeral=True)
+                await interaction.response.send_message(
+                    "No listings to show. Create one with `/list` or on sc-market.space.", ephemeral=True
+                )
                 return
 
             logger.debug(f"Displaying {len(listings)} listings for user {interaction.user.id}")
@@ -162,7 +159,7 @@ class stock(commands.GroupCog):
             logger.error(f"User: {interaction.user.id}, Owner: {owner}")
             logger.error(f"Full traceback: {traceback.format_exc()}")
             
-            await interaction.response.send_message("An error occurred while fetching the listings. Please try again or contact support if the issue persists.", ephemeral=True)
+            await send_ephemeral(interaction, "❌ Couldn't load your listings. Please try again in a moment.")
 
     @set_stock.autocomplete('listing')
     @add_stock.autocomplete('listing')
@@ -176,18 +173,10 @@ class stock(commands.GroupCog):
         try:
             logger.debug(f"Fetching listings for stock autocomplete: user={interaction.user.id}, current={current}")
             
-            if interaction.namespace.owner != "_ME":
-                try:
-                    owner = json.loads(interaction.namespace.owner)
-                    logger.debug(f"Fetching org listings for contractor {owner['s']}")
-                    listings = await get_org_listings(owner['s'], interaction.user.id,
-                                                      session=self.bot.session)
-                except json.JSONDecodeError as e:
-                    logger.error(f"Failed to parse owner JSON in autocomplete: {e}")
-                    logger.error(f"Raw owner string: {interaction.namespace.owner}")
-                    return []
+            spectrum_id = parse_owner(interaction.namespace.owner)
+            if spectrum_id:
+                listings = await get_org_listings(spectrum_id, interaction.user.id, session=self.bot.session)
             else:
-                logger.debug(f"Fetching user listings for {interaction.user.id}")
                 listings = await get_user_listings(interaction.user.id, session=self.bot.session)
 
             if not listings:
@@ -196,7 +185,7 @@ class stock(commands.GroupCog):
 
             choices = [
                           app_commands.Choice(
-                              name=f"{listing['title'][:100]} ({int(listing['quantity_available']):,} available)",
+                              name=f"{listing['title'][:80]} ({int(listing['quantity_available']):,} available)"[:100],
                               value=ujson.dumps(dict(l=listing['listing_id'], t=listing['title'],
                                                      q=int(listing['quantity_available'])))
                           )
@@ -224,25 +213,4 @@ class stock(commands.GroupCog):
             interaction: discord.Interaction,
             current: str,
     ) -> List[app_commands.Choice[str]]:
-        """Enhanced owner autocomplete with error logging"""
-        try:
-            logger.debug(f"Fetching orgs for owner autocomplete: user={interaction.user.id}, current={current}")
-            orgs = await get_user_orgs(interaction.user.id, session=self.bot.session)
-
-            choices = [
-                app_commands.Choice(name=f"{org['name']} ({org['spectrum_id']})",
-                                    value=json.dumps(dict(s=org['spectrum_id'], n=org['name'])))
-                for org in orgs if
-                current.lower() in org['name'].lower() or current.lower() in org['spectrum_id'].lower()
-            ][:24] + [app_commands.Choice(name=f"Me", value='_ME')]
-            
-            logger.debug(f"Generated {len(choices)} owner autocomplete choices for user {interaction.user.id}")
-            return choices
-            
-        except Exception as e:
-            logger.error(f"Error in owner autocomplete: {e}")
-            logger.error(f"Error type: {type(e).__name__}")
-            logger.error(f"User: {interaction.user.id}, Current: {current}")
-            logger.error(f"Full traceback: {traceback.format_exc()}")
-            # Return basic choices on error to avoid breaking the command
-            return [app_commands.Choice(name=f"Me", value='_ME')]
+        return await owner_autocomplete(self.bot, interaction, current)

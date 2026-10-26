@@ -4,7 +4,7 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
-from util.fetch import internal_post, internal_fetch, public_fetch
+from util.fetch import internal_post, internal_fetch
 
 logger = logging.getLogger('SCMarketBot.WatchlistCog')
 
@@ -26,7 +26,7 @@ class Watchlist(commands.GroupCog, group_name="watchlist", group_description="Tr
     ):
         """Add an item to your watchlist with a price alert"""
         if max_price <= 0:
-            await interaction.response.send_message("Price must be greater than 0.", ephemeral=True)
+            await interaction.response.send_message("❌ The target price must be greater than 0 aUEC.", ephemeral=True)
             return
 
         await interaction.response.defer(ephemeral=True)
@@ -42,7 +42,7 @@ class Watchlist(commands.GroupCog, group_name="watchlist", group_description="Tr
         )
 
         if response.get("error"):
-            await interaction.followup.send(f"Failed to add watchlist item: {response['error']}", ephemeral=True)
+            await interaction.followup.send(f"❌ Couldn't add it to your watchlist: {response['error']}", ephemeral=True)
         else:
             embed = discord.Embed(
                 title="Watchlist Updated",
@@ -80,7 +80,7 @@ class Watchlist(commands.GroupCog, group_name="watchlist", group_description="Tr
         )
 
         if response.get("error"):
-            await interaction.followup.send(f"Failed to remove: {response['error']}", ephemeral=True)
+            await interaction.followup.send(f"❌ Couldn't remove it: {response['error']}", ephemeral=True)
         else:
             await interaction.followup.send(
                 "Removed from your watchlist. You'll no longer get price or stock alerts for this item.\n"

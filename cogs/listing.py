@@ -4,7 +4,8 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
-from util.fetch import internal_post, get_user_orgs
+from util.fetch import internal_post
+from util.owners import owner_autocomplete, parse_owner
 
 logger = logging.getLogger('SCMarketBot.ListingCog')
 
@@ -46,7 +47,7 @@ class CreateListingModal(discord.ui.Modal, title="Create a Listing"):
             if price_val <= 0:
                 raise ValueError()
         except ValueError:
-            await interaction.response.send_message("Invalid price. Please enter a positive number.", ephemeral=True)
+            await interaction.response.send_message("❌ The price must be a whole number above 0, e.g. 50000.", ephemeral=True)
             return
 
         # Validate quantity
@@ -55,7 +56,7 @@ class CreateListingModal(discord.ui.Modal, title="Create a Listing"):
             if quantity_val <= 0:
                 raise ValueError()
         except ValueError:
-            await interaction.response.send_message("Invalid quantity. Please enter a positive number.", ephemeral=True)
+            await interaction.response.send_message("❌ The quantity must be a whole number above 0, e.g. 1.", ephemeral=True)
             return
 
         await interaction.response.defer(ephemeral=True)
@@ -79,7 +80,7 @@ class CreateListingModal(discord.ui.Modal, title="Create a Listing"):
 
         if response.get("error"):
             await interaction.followup.send(
-                f"Failed to create listing: {response['error']}",
+                f"❌ Couldn't create the listing: {response['error']}",
                 ephemeral=True,
             )
         else:
@@ -109,7 +110,7 @@ class Listing(commands.Cog):
 
     @app_commands.command(name="list", description="Create a new market listing via a fill-in form")
     @app_commands.describe(
-        owner='List as yourself or an org, e.g. My Org Name (optional)',
+        owner='Who sells it: Me (default) or one of your orgs, e.g. Me',
     )
     async def create_listing(
             self,
@@ -117,15 +118,7 @@ class Listing(commands.Cog):
             owner: str = None,
     ):
         """Create a new market listing"""
-        contractor_spectrum_id = None
-        if owner and owner != "_ME":
-            try:
-                import json
-                owner_data = json.loads(owner)
-                contractor_spectrum_id = owner_data.get('s')
-            except Exception:
-                pass
-
+        contractor_spectrum_id = parse_owner(owner)
         modal = CreateListingModal(self.bot, contractor_spectrum_id)
         await interaction.response.send_modal(modal)
 
@@ -135,18 +128,4 @@ class Listing(commands.Cog):
             interaction: discord.Interaction,
             current: str,
     ):
-        try:
-            orgs = await get_user_orgs(interaction.user.id, session=self.bot.session)
-            import json
-            choices = [
-                app_commands.Choice(
-                    name=f"{org['name']} ({org['spectrum_id']})",
-                    value=json.dumps(dict(s=org['spectrum_id'], n=org['name']))
-                )
-                for org in orgs if
-                current.lower() in org['name'].lower() or current.lower() in org['spectrum_id'].lower()
-            ][:24] + [app_commands.Choice(name="Me", value='_ME')]
-            return choices
-        except Exception as e:
-            logger.error(f"Error in listing owner autocomplete: {e}")
-            return [app_commands.Choice(name="Me", value='_ME')]
+        return await owner_autocomplete(self.bot, interaction, current)

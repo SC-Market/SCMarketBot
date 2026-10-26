@@ -1,4 +1,3 @@
-import os
 import discord
 from discord.ext import commands
 from discord import app_commands
@@ -7,6 +6,7 @@ import aiohttp
 
 from util.checks import guild_manage_channels
 from util.config import Config
+from util.owners import org_autocomplete
 
 logger = logging.getLogger('SCMarketBot.SubscribeCog')
 
@@ -17,16 +17,6 @@ DISCORD_BACKEND_URL = Config.discord_backend_base()
 class AlertSubscriptions(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-
-    async def cog_app_command_error(self, interaction: discord.Interaction, error: app_commands.AppCommandError):
-        """Tell the user why a permission check rejected them (other errors fall through to the tree's logger)."""
-        if not isinstance(error, app_commands.CheckFailure):
-            return
-        message = f"❌ {error}"
-        if interaction.response.is_done():
-            await interaction.followup.send(message, ephemeral=True)
-        else:
-            await interaction.response.send_message(message, ephemeral=True)
 
     @commands.Cog.listener()
     async def on_interaction(self, interaction: discord.Interaction):
@@ -89,87 +79,34 @@ class AlertSubscriptions(commands.Cog):
             logger.error(f"Failed to handle claim {claim_type}: {e}")
             await interaction.followup.send(f"❌ An error occurred while claiming this {claim_type}.", ephemeral=True)
 
-    subscribe_group = app_commands.Group(name="subscribe", description="Manage alert subscriptions")
+    subscribe_group = app_commands.Group(
+        name="subscribe",
+        description="Post new orders and offers in this channel with a Claim button (needs Manage Channels)",
+    )
 
-    @subscribe_group.command(name="alerts", description="Subscribe this channel to order/offer alerts for an organization")
-    @app_commands.describe(org_name="The spectrum ID of the organization")
+    @subscribe_group.command(name="alerts", description="Post your org's new orders and offers in this channel, with a Claim button")
+    @app_commands.describe(org_name="Your org's Spectrum ID; pick from the list, e.g. SCMARKET")
     @guild_manage_channels()
     async def subscribe_alerts(self, interaction: discord.Interaction, org_name: str):
         await interaction.response.defer(ephemeral=True)
-        try:
-            async with aiohttp.ClientSession() as session:
-                async with session.post(
-                    f"{DISCORD_BACKEND_URL}/alert-subscriptions",
-                    json={
-                        "channel_id": str(interaction.channel_id),
-                        "guild_id": str(interaction.guild_id),
-                        "spectrum_id": org_name,
-                        "discord_id": str(interaction.user.id),
-                    },
-                ) as resp:
-                    data = await resp.json()
-                    if not resp.ok:
-                        await interaction.followup.send(f"❌ {data.get('error', 'Unknown error')}", ephemeral=True)
-                        return
-                    embed = discord.Embed(
-                        title="✅ Alert Subscription Active",
-                        description=f"This channel will now receive order and offer alerts for **{org_name}**.\n\nMembers with the **Claim Orders** permission can click the button on alerts to assign themselves.",
-                        color=0x10b881,
-                    )
-                    embed.add_field(
-                        name="What's next",
-                        value=(
-                            f"New order and offer alerts for **{org_name}** will now be posted here as they come in; "
-                            "members with the **Claim Orders** permission can click the button on an alert to self-assign.\n"
-                            "-# Stop with /unsubscribe alerts"
-                        ),
-                        inline=False,
-                    )
-                    await interaction.followup.send(embed=embed, ephemeral=True)
-        except Exception as e:
-            logger.error(f"Failed to subscribe alerts: {e}")
-            await interaction.followup.send("❌ An error occurred.", ephemeral=True)
+        await create_alert_subscription(interaction, org_name)
 
-    @subscribe_group.command(name="alerts_user", description="Subscribe this channel to your personal order/offer alerts")
+    @subscribe_alerts.autocomplete("org_name")
+    async def subscribe_alerts_org_autocomplete(self, interaction: discord.Interaction, current: str):
+        return await org_autocomplete(self.bot, interaction, current)
+
+    @subscribe_group.command(name="alerts_user", description="Post new offers sent to you personally in this channel")
     @guild_manage_channels()
     async def subscribe_alerts_user(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True)
-        try:
-            async with aiohttp.ClientSession() as session:
-                async with session.post(
-                    f"{DISCORD_BACKEND_URL}/alert-subscriptions",
-                    json={
-                        "channel_id": str(interaction.channel_id),
-                        "guild_id": str(interaction.guild_id),
-                        "discord_id": str(interaction.user.id),
-                    },
-                ) as resp:
-                    data = await resp.json()
-                    if not resp.ok:
-                        await interaction.followup.send(f"❌ {data.get('error', 'Unknown error')}", ephemeral=True)
-                        return
-                    embed = discord.Embed(
-                        title="✅ Alert Subscription Active",
-                        description="This channel will now receive your personal order and offer alerts.",
-                        color=0x10b881,
-                    )
-                    embed.add_field(
-                        name="What's next",
-                        value=(
-                            "New order and offer alerts for you will now be posted here as they come in; "
-                            "members with the **Claim Orders** permission can click the button on an alert to self-assign.\n"
-                            "-# Stop with /unsubscribe alerts"
-                        ),
-                        inline=False,
-                    )
-                    await interaction.followup.send(embed=embed, ephemeral=True)
-        except Exception as e:
-            logger.error(f"Failed to subscribe user alerts: {e}")
-            await interaction.followup.send("❌ An error occurred.", ephemeral=True)
+        await create_alert_subscription(interaction, None)
 
-    unsubscribe_group = app_commands.Group(name="unsubscribe", description="Remove subscriptions")
+    unsubscribe_group = app_commands.Group(
+        name="unsubscribe",
+        description="Stop posting order and offer alerts in this channel (needs Manage Channels)",
+    )
 
-    @unsubscribe_group.command(name="alerts", description="Remove order/offer alert subscription from this channel")
+    @unsubscribe_group.command(name="alerts", description="Stop posting order and offer alerts in this channel")
     @guild_manage_channels()
     async def unsubscribe_alerts(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True)
@@ -180,21 +117,80 @@ class AlertSubscriptions(commands.Cog):
                     json={"discord_id": str(interaction.user.id)},
                 ) as resp:
                     if resp.status == 404:
-                        await interaction.followup.send("❌ No alert subscription found for this channel.", ephemeral=True)
+                        await interaction.followup.send(
+                            "❌ This channel isn't receiving alerts, so there's nothing to remove.\n"
+                            "-# Run /unsubscribe alerts in the channel where the alerts are posted.",
+                            ephemeral=True,
+                        )
                         return
                     if resp.status == 403:
                         data = await resp.json()
                         await interaction.followup.send(f"❌ {data.get('error', 'You cannot remove this subscription.')}", ephemeral=True)
                         return
                     if not resp.ok:
-                        await interaction.followup.send("❌ Failed to remove subscription.", ephemeral=True)
+                        await interaction.followup.send("❌ Couldn't remove the alerts. Please try again in a moment.", ephemeral=True)
                         return
                     await interaction.followup.send(
                         "✅ Alert subscription removed from this channel.\n"
                         "This channel will stop receiving alerts.\n"
-                        "-# Re-enable anytime with /subscribe alerts <org> or /subscribe alerts_user",
+                        "-# Turn them back on with /setup or /subscribe alerts",
                         ephemeral=True,
                     )
         except Exception as e:
             logger.error(f"Failed to unsubscribe alerts: {e}")
-            await interaction.followup.send("❌ An error occurred.", ephemeral=True)
+            await interaction.followup.send("❌ Couldn't reach SC Market. Please try again in a moment.", ephemeral=True)
+
+
+def subscription_success_embed(org_name):
+    """What the channel will now receive, and who can act on it."""
+    if org_name:
+        description = (
+            f"New orders and offers for **{org_name}** will be posted here as they come in, "
+            "each with a **Claim** button."
+        )
+        claim = (
+            "Org members with the **Claim Orders** role permission on SC Market can click **Claim** "
+            "to assign the order or offer to themselves. Orders that already have an assignee aren't posted."
+        )
+    else:
+        description = "New offers sent to you personally will be posted here as they come in."
+        claim = "Personal offers are already yours, so they have no Claim button; open the link to reply."
+    embed = discord.Embed(title="✅ Alerts are on for this channel", description=description, color=0x10b881)
+    embed.add_field(name="Claiming", value=claim, inline=False)
+    embed.add_field(
+        name="What's next",
+        value=(
+            "Want a private thread with the buyer for each order too? Run `/setup` and pick **Order threads**.\n"
+            "-# Stop with /unsubscribe alerts · one alert setup per channel; subscribing again replaces it"
+        ),
+        inline=False,
+    )
+    return embed
+
+
+async def create_alert_subscription(interaction: discord.Interaction, org_name):
+    """POST /alert-subscriptions for this channel and report the outcome (interaction already deferred).
+
+    ``org_name`` is the org's Spectrum ID, or None for personal alerts. Returns True on success.
+    """
+    org_name = (org_name or "").strip() or None
+    body = {
+        "channel_id": str(interaction.channel_id),
+        "guild_id": str(interaction.guild_id),
+        "discord_id": str(interaction.user.id),
+    }
+    if org_name:
+        body["spectrum_id"] = org_name
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.post(f"{DISCORD_BACKEND_URL}/alert-subscriptions", json=body) as resp:
+                data = await resp.json()
+                if not resp.ok:
+                    await interaction.followup.send(f"❌ {data.get('error', 'Unknown error')}", ephemeral=True)
+                    return False
+    except Exception as e:
+        logger.error(f"Failed to subscribe alerts: {e}")
+        await interaction.followup.send("❌ Couldn't reach SC Market. Please try again in a moment.", ephemeral=True)
+        return False
+    await interaction.followup.send(embed=subscription_success_embed(org_name), ephemeral=True)
+    return True

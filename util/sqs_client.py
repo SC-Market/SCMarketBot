@@ -241,8 +241,9 @@ class SQSClient:
                               f"total_messages={self.message_count}, errors={self.error_count}")
                     
                     # Alert if no messages for too long
+                    # An idle queue is normal (orders are infrequent), so this is not a warning.
                     if time_since_last_message > 600:  # 10 minutes
-                        logger.warning(f"Queue '{queue_name}' has not received messages for {time_since_last_message:.1f} seconds")
+                        logger.debug(f"Queue '{queue_name}' has not received messages for {time_since_last_message:.1f} seconds")
                     
                     # Alert if queue depth is high
                     if depth > 100:
@@ -260,16 +261,17 @@ class SQSClient:
     async def _log_queue_status(self, queue_name: str):
         """Log queue status periodically"""
         try:
+            # Log queue depth every 5 minutes; check the clock first so the
+            # receive loop doesn't call GetQueueAttributes on every poll.
+            current_time = time.time()
+            if current_time - getattr(self, '_last_queue_log', 0) <= 300:
+                return
+            self._last_queue_log = current_time
             attributes = await self.get_queue_attributes(queue_name)
             if attributes:
                 depth = int(attributes.get('ApproximateNumberOfMessages', 0))
                 in_flight = int(attributes.get('ApproximateNumberOfMessagesNotVisible', 0))
-                
-                # Log queue depth every 5 minutes
-                current_time = time.time()
-                if not hasattr(self, '_last_queue_log') or current_time - getattr(self, '_last_queue_log', 0) > 300:
-                    logger.debug(f"Queue '{queue_name}' status: depth={depth}, in_flight={in_flight}")
-                    self._last_queue_log = current_time
+                logger.debug(f"Queue '{queue_name}' status: depth={depth}, in_flight={in_flight}")
                     
         except Exception as e:
             logger.debug(f"Could not log queue status: {e}")
@@ -336,39 +338,6 @@ class SQSClient:
             logger.error(f"Full traceback: {traceback.format_exc()}")
             # Don't delete the message so it can be retried
     
-    async def send_order_placed(self, order_data: Dict[str, Any]) -> bool:
-        """Send order placed event to SQS"""
-        return await self.send_message(
-            'order-placed-queue',
-            {
-                'event_type': 'order_placed',
-                'data': order_data,
-                'timestamp': asyncio.get_event_loop().time()
-            }
-        )
-    
-    async def send_order_assigned(self, assignment_data: Dict[str, Any]) -> bool:
-        """Send order assigned event to SQS"""
-        return await self.send_message(
-            'order-assigned-queue',
-            {
-                'event_type': 'order_assigned',
-                'data': assignment_data,
-                'timestamp': asyncio.get_event_loop().time()
-            }
-        )
-    
-    async def send_order_status_updated(self, status_data: Dict[str, Any]) -> bool:
-        """Send order status updated event to SQS"""
-        return await self.send_message(
-            'order-status-updated-queue',
-            {
-                'event_type': 'order_status_updated',
-                'data': status_data,
-                'timestamp': asyncio.get_event_loop().time()
-            }
-        )
-
     def get_health_status(self) -> Dict[str, Any]:
         """Get current health status of the SQS client"""
         current_time = time.time()

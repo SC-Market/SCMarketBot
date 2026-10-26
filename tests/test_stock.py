@@ -46,7 +46,7 @@ async def test_success_reply_uses_backend_quantities(action):
 
     interaction.response.send_message.assert_awaited_once()
     message = interaction.response.send_message.await_args.args[0]
-    assert "has been set from `7` to `12`" in message
+    assert "changed from `7` to `12`" in message
     assert "buyers will see `12` available" in message
     assert "`10`" not in message
 
@@ -58,4 +58,4 @@ async def test_backend_error_reply_is_ephemeral():
     with patch.object(stock_module, "internal_post", AsyncMock(return_value=backend)):
         await _cog().handle_stock_change(interaction, "add", "_ME", LISTING, 5)
 
-    interaction.response.send_message.assert_awaited_once_with("Listing not found", ephemeral=True)
+    interaction.response.send_message.assert_awaited_once_with("❌ Listing not found", ephemeral=True)

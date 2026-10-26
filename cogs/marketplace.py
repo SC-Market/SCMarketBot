@@ -1,18 +1,14 @@
 """
-Marketplace interaction cog - handles Buy/Offer buttons on search results
-and the /import uex command.
+Buy/Offer modals used by the /search result buttons, and the /import uex command.
 """
 import logging
-from typing import List
-from urllib.parse import quote
 
 import aiohttp
 import discord
 from discord import app_commands
 from discord.ext import commands
 
-from util.fetch import internal_post, public_fetch
-from util.config import Config
+from util.fetch import internal_post
 
 logger = logging.getLogger('SCMarketBot.MarketplaceCog')
 
@@ -47,7 +43,7 @@ class BuyModal(discord.ui.Modal, title="Place Order"):
             if qty <= 0:
                 raise ValueError()
         except ValueError:
-            await interaction.response.send_message("Invalid quantity.", ephemeral=True)
+            await interaction.response.send_message("❌ The quantity must be a whole number above 0, e.g. 1.", ephemeral=True)
             return
 
         await interaction.response.defer(ephemeral=True)
@@ -64,7 +60,7 @@ class BuyModal(discord.ui.Modal, title="Place Order"):
         )
 
         if response.get("error"):
-            await interaction.followup.send(f"Order failed: {response['error']}", ephemeral=True)
+            await interaction.followup.send(f"❌ Couldn't place the order: {response['error']}", ephemeral=True)
         else:
             total = self.price * qty
             embed = discord.Embed(
@@ -109,7 +105,7 @@ class OfferModal(discord.ui.Modal, title="Make an Offer"):
             if amount <= 0:
                 raise ValueError()
         except ValueError:
-            await interaction.response.send_message("Invalid offer amount.", ephemeral=True)
+            await interaction.response.send_message("❌ The offer must be a whole number of aUEC above 0, e.g. 45000.", ephemeral=True)
             return
 
         try:
@@ -117,7 +113,7 @@ class OfferModal(discord.ui.Modal, title="Make an Offer"):
             if qty <= 0:
                 raise ValueError()
         except ValueError:
-            await interaction.response.send_message("Invalid quantity.", ephemeral=True)
+            await interaction.response.send_message("❌ The quantity must be a whole number above 0, e.g. 1.", ephemeral=True)
             return
 
         await interaction.response.defer(ephemeral=True)
@@ -135,7 +131,7 @@ class OfferModal(discord.ui.Modal, title="Make an Offer"):
         )
 
         if response.get("error"):
-            await interaction.followup.send(f"Offer failed: {response['error']}", ephemeral=True)
+            await interaction.followup.send(f"❌ Couldn't send the offer: {response['error']}", ephemeral=True)
         else:
             embed = discord.Embed(
                 title="Offer Sent",
@@ -145,34 +141,6 @@ class OfferModal(discord.ui.Modal, title="Make an Offer"):
                 color=0x5865F2,
             )
             await interaction.followup.send(embed=embed, ephemeral=True)
-
-
-class MarketplaceView(discord.ui.View):
-    """View with Buy and Offer buttons for search results."""
-
-    def __init__(self, bot, listing_id: str, listing_title: str, price: int):
-        super().__init__(timeout=600)
-        self.bot = bot
-        self.listing_id = listing_id
-        self.listing_title = listing_title
-        self.price = price
-        self.add_item(discord.ui.Button(
-            label="View on Site",
-            style=discord.ButtonStyle.link,
-            url=f"https://sc-market.space/market/{listing_id}",
-        ))
-
-    @discord.ui.button(label="Buy Now", style=discord.ButtonStyle.green, emoji="🛒")
-    async def buy_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        modal = BuyModal(self.bot, self.listing_id, self.listing_title, self.price)
-        await interaction.response.send_modal(modal)
-
-    @discord.ui.button(label="Make Offer", style=discord.ButtonStyle.blurple, emoji="💬")
-    async def offer_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        modal = OfferModal(self.bot, self.listing_id, self.listing_title)
-        await interaction.response.send_modal(modal)
-
-    # URL buttons can't use the decorator pattern — added in __init__ of parent class
 
 
 class UEXImportView(discord.ui.View):
@@ -198,7 +166,7 @@ class UEXImportView(discord.ui.View):
         )
 
         if response.get("error"):
-            await interaction.followup.send(f"Import failed: {response['error']}", ephemeral=True)
+            await interaction.followup.send(f"❌ Couldn't import: {response['error']}", ephemeral=True)
         else:
             count = response.get("imported", len(self.listings))
             embed = discord.Embed(
@@ -228,61 +196,7 @@ class Marketplace(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    @commands.Cog.listener()
-    async def on_interaction(self, interaction: discord.Interaction):
-        """Handle marketplace button interactions (buy/offer on search results)."""
-        if interaction.type != discord.InteractionType.component:
-            return
-
-        custom_id = interaction.data.get("custom_id", "") if interaction.data else ""
-
-        if custom_id.startswith("market_buy:"):
-            parts = custom_id.split(":", 2)
-            if len(parts) >= 2:
-                listing_id = parts[1]
-                # Fetch listing details for the modal
-                try:
-                    result = await public_fetch(
-                        f"/v2/listings/{quote(listing_id, safe='')}",
-                        session=self.bot.session,
-                    )
-                    listing_data = result.get('listing', {})
-                    items = result.get('items', [])
-                    price = 0
-                    for item in items:
-                        if item.get('base_price'):
-                            price = item['base_price']
-                            break
-                        for v in item.get('variants', []):
-                            if v.get('price'):
-                                price = v['price']
-                                break
-                        if price:
-                            break
-
-                    modal = BuyModal(self.bot, listing_id, listing_data.get('title', 'Item'), price)
-                    await interaction.response.send_modal(modal)
-                except Exception as e:
-                    logger.error(f"Error handling buy button: {e}")
-                    await interaction.response.send_message("Failed to load listing details.", ephemeral=True)
-
-        elif custom_id.startswith("market_offer:"):
-            parts = custom_id.split(":", 2)
-            if len(parts) >= 2:
-                listing_id = parts[1]
-                try:
-                    result = await public_fetch(
-                        f"/v2/listings/{quote(listing_id, safe='')}",
-                        session=self.bot.session,
-                    )
-                    listing_data = result.get('listing', {})
-                    modal = OfferModal(self.bot, listing_id, listing_data.get('title', 'Item'))
-                    await interaction.response.send_modal(modal)
-                except Exception as e:
-                    logger.error(f"Error handling offer button: {e}")
-                    await interaction.response.send_message("Failed to load listing details.", ephemeral=True)
-
-    import_group = app_commands.Group(name="import", description="Import listings from external platforms")
+    import_group = app_commands.Group(name="import", description="Copy your listings from another marketplace onto SC Market")
 
     @import_group.command(name="uex", description="Import your UEXCorp sell listings onto SC Market")
     @app_commands.describe(

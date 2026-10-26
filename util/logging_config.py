@@ -2,7 +2,7 @@ import logging
 import os
 import sys
 from datetime import datetime
-from typing import Dict, Any
+
 
 class LoggingConfig:
     """Centralized logging configuration for the SCMarket bot"""
@@ -84,27 +84,6 @@ class LoggingConfig:
         return bot_logger
     
     @classmethod
-    def set_component_level(cls, component: str, level: str):
-        """Set the logging level for a specific component"""
-        if level.upper() not in ['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL']:
-            raise ValueError(f"Invalid log level: {level}")
-        
-        logger = logging.getLogger(component)
-        logger.setLevel(getattr(logging, level.upper()))
-        
-        # Update the component levels dict
-        cls.COMPONENT_LEVELS[component] = level
-        
-        # Log the change
-        main_logger = logging.getLogger('SCMarketBot')
-        main_logger.info(f"Set logging level for {component} to {level}")
-    
-    @classmethod
-    def get_component_levels(cls) -> Dict[str, str]:
-        """Get current logging levels for all components"""
-        return cls.COMPONENT_LEVELS.copy()
-    
-    @classmethod
     def log_startup_info(cls):
         """Log startup information including configuration"""
         logger = logging.getLogger('SCMarketBot')
@@ -134,49 +113,3 @@ class LoggingConfig:
         logger.info("=" * 60)
         logger.info(f"Shutdown time: {datetime.now().isoformat()}")
         logger.info("=" * 60)
-    
-    @classmethod
-    def create_rotating_handlers(cls):
-        """Create rotating file handlers for better log management"""
-        try:
-            from logging.handlers import RotatingFileHandler
-            
-            # Rotating handler for main bot log
-            rotating_bot_handler = RotatingFileHandler(
-                'logs/bot.log',
-                maxBytes=10*1024*1024,  # 10MB
-                backupCount=5
-            )
-            rotating_bot_handler.setLevel(logging.DEBUG)
-            rotating_bot_handler.setFormatter(
-                logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(funcName)s:%(lineno)d - %(message)s')
-            )
-            
-            # Rotating handler for error log
-            rotating_error_handler = RotatingFileHandler(
-                'logs/error.log',
-                maxBytes=5*1024*1024,  # 5MB
-                backupCount=3
-            )
-            rotating_error_handler.setLevel(logging.ERROR)
-            rotating_error_handler.setFormatter(
-                logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(funcName)s:%(lineno)d - %(message)s')
-            )
-            
-            # Rotating handler for SQS log
-            rotating_sqs_handler = RotatingFileHandler(
-                'logs/sqs.log',
-                maxBytes=5*1024*1024,  # 5MB
-                backupCount=3
-            )
-            rotating_sqs_handler.setLevel(logging.DEBUG)
-            rotating_sqs_handler.setFormatter(
-                logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(funcName)s:%(lineno)d - %(message)s')
-            )
-            
-            return rotating_bot_handler, rotating_error_handler, rotating_sqs_handler
-            
-        except ImportError:
-            # Fallback to regular handlers if rotating handlers not available
-            return None, None, None
-

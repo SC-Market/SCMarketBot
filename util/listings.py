@@ -2,25 +2,9 @@ import datetime
 from typing import List
 
 import discord
-import humanize
 from discord.ext.paginators.button_paginator import ButtonPaginator
 
 from util.iter import chunks
-
-categories = ["Armor", "Clothing", "Weapon", "Paint", "Bundle", "Flair", "Addon", "Consumable", "Other"]
-sorting_methods = {
-    'title': "Title",
-    'price-low': "Price (Low to High)",
-    'price-high': "Price (High to Low)",
-    'quantity-low': "Quantity Available (Low to High)",
-    'quantity-high': "Quantity Available (High to Low)",
-    'date-new': "Date Listed (Old to New)",
-    'date-old': "Date Listed (New to Old)",
-    'activity': "Recent Activity",
-    'rating': "Rating (High to Low)",
-}
-
-sale_types = ["Aggregate", "Auction", "Sale"]
 
 # V2 sorting methods mapped to API params
 v2_sorting_methods = {
@@ -32,55 +16,6 @@ v2_sorting_methods = {
 }
 
 v2_item_types = ["armor", "clothing", "weapon", "paint", "bundle", "flair", "addon", "consumable", "other"]
-
-
-def create_market_embed(listing: dict):
-    embed = discord.Embed(url=f"https://sc-market.space/market/{listing['listing_id']}", title=listing['title'])
-    embed.add_field(name="Item Type", value=listing['item_type'].capitalize())
-    if listing["listing_type"] != "unique":
-        embed.add_field(name="Minimum Price", value=f"{int(listing['minimum_price']):,} aUEC")
-        embed.add_field(name="Maximum Price", value=f"{int(listing['maximum_price']):,} aUEC")
-    else:
-        embed.add_field(name="Price", value=f"{int(listing['price']):,} aUEC")
-        embed.add_field(
-            name="Seller",
-            value=f"[{listing['contractor_seller'] or listing['user_seller']}]({'https://sc-market.space/contractor/' + listing['contractor_seller'] if listing['contractor_seller'] else 'https://sc-market.space/user/' + listing['user_seller']}) {'⭐' * int(round(listing['avg_rating']))}"
-        )
-
-    if listing['auction_end_time'] is not None:
-        date = datetime.datetime.strptime(listing['auction_end_time'], '%Y-%m-%dT%H:%M:%S.%fZ')
-        embed.add_field(name="Auction End", value="Ending " + humanize.naturaltime(date))
-
-    embed.add_field(name="Quantity Available", value=f"{int(listing['quantity_available']):,}")
-
-    embed.set_image(url=listing['photo'])
-    embed.timestamp = datetime.datetime.strptime(listing['timestamp'], '%Y-%m-%dT%H:%M:%S.%fZ')
-
-    return embed
-
-
-def create_market_embed_individual(listing: dict):
-    embed = discord.Embed(url=f"https://sc-market.space/market/{listing['listing']['listing_id']}",
-                          title=listing['details']['title'])
-    embed.add_field(name="Item Type", value=listing['details']['item_type'].capitalize())
-    embed.add_field(name="Price", value=f"{int(listing['listing']['price']):,} aUEC")
-    seller = listing['listing'].get('contractor_seller') or listing['listing'].get('user_seller')
-    embed.add_field(
-        name="Seller",
-        value=f"[{seller.get('name') or seller.get('display_name')}]({'https://sc-market.space/contractor/' + seller['spectrum_id'] if listing['listing'].get('contractor_seller') else 'https://sc-market.space/user/' + seller['username']}) {'⭐' * int(round(seller['rating']['avg_rating'] / 10))}"
-    )
-
-    if listing.get('auction_details') and listing['auction_details']['auction_end_time'] is not None:
-        date = datetime.datetime.strptime(listing['auction_details']['auction_end_time'], '%Y-%m-%dT%H:%M:%S.%fZ')
-        embed.add_field(name="Auction End", value="Ending " + humanize.naturaltime(date))
-
-    embed.add_field(name="Quantity Available", value=f"{int(listing['listing']['quantity_available']):,}")
-
-    embed.set_image(url=listing['photos'][0] if listing[
-        'photos'] else "https://cdn.robertsspaceindustries.com/static/images/Temp/default-image.png")
-    embed.timestamp = datetime.datetime.strptime(listing['listing']['timestamp'], '%Y-%m-%dT%H:%M:%S.%fZ')
-
-    return embed
 
 
 def create_stock_embed(entries: List[str]):
@@ -170,59 +105,5 @@ def create_v2_search_embed(listing: dict):
             embed.timestamp = datetime.datetime.fromisoformat(created_at.replace('Z', '+00:00'))
         except (ValueError, AttributeError):
             pass
-
-    return embed
-
-
-def create_v2_detail_embed(data: dict):
-    """Create an embed from a V2 listing detail response."""
-    listing_data = data['listing']
-    seller = data['seller']
-    items = data.get('items', [])
-
-    embed = discord.Embed(
-        url=f"https://sc-market.space/market/{listing_data['listing_id']}",
-        title=listing_data['title'],
-        description=(listing_data.get('description', '') or '')[:200],
-    )
-
-    # Price from items/variants
-    all_prices = []
-    total_quantity = 0
-    for item in items:
-        if item.get('pricing_mode') == 'unified' and item.get('base_price'):
-            all_prices.append(item['base_price'])
-        for variant in item.get('variants', []):
-            if variant.get('price'):
-                all_prices.append(variant['price'])
-            total_quantity += variant.get('quantity', 0)
-
-    if all_prices:
-        p_min, p_max = min(all_prices), max(all_prices)
-        if p_min == p_max:
-            embed.add_field(name="Price", value=f"{p_min:,} aUEC")
-        else:
-            embed.add_field(name="Price", value=f"{p_min:,} - {p_max:,} aUEC")
-
-    # Shop (seller)
-    stars = int(round(seller.get('rating', 0)))
-    shop_url = f"https://sc-market.space/shops/{seller['slug']}"
-    embed.add_field(
-        name="Shop",
-        value=f"[{seller['name']}]({shop_url}) {'⭐' * stars}"
-    )
-
-    embed.add_field(name="Quantity", value=f"{total_quantity:,}")
-    embed.add_field(name="Status", value=listing_data.get('status', 'active').capitalize())
-
-    # Photos
-    photos = listing_data.get('photos', [])
-    if photos:
-        embed.set_image(url=photos[0])
-
-    try:
-        embed.timestamp = datetime.datetime.fromisoformat(listing_data['created_at'].replace('Z', '+00:00'))
-    except (ValueError, AttributeError, KeyError):
-        pass
 
     return embed

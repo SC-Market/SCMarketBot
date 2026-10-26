@@ -2,11 +2,10 @@ import discord
 from discord.ext import commands
 from discord import app_commands
 import logging
-from typing import List, Optional
 
 logger = logging.getLogger('SCMarketBot.AdminCog')
 
-class Admin(commands.GroupCog):
+class Admin(commands.GroupCog, group_description="Bot maintenance tools (SC Market staff only)"):
     def __init__(self, bot):
         self.bot = bot
         # Hardcoded authorized user ID
@@ -39,8 +38,7 @@ class Admin(commands.GroupCog):
         """Permission check decorator for admin commands"""
         if not await self._check_permissions(interaction):
             await interaction.response.send_message(
-                "❌ You don't have permission to use this command. "
-                "Only authorized developers can access admin functions.",
+                "❌ /admin commands are for SC Market staff only. Run `/help` to see what you can use.",
                 ephemeral=True
             )
             return False
@@ -59,7 +57,9 @@ class Admin(commands.GroupCog):
         # Check permissions first
         if not await self._permission_check(interaction):
             return
-        
+        # The checks below reply with followup.send, which needs an answered interaction.
+        await interaction.response.defer(ephemeral=True)
+
         logger.info(f"Health check requested by {interaction.user.id} ({interaction.user.name}) for component: {component}")
         
         try:

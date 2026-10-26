@@ -27,6 +27,6 @@ The bot now uses AWS SQS queues for all event processing. See [SQS Configuration
 3. Set queue URLs from your deployed CDK stack:
    - `DISCORD_QUEUE_URL=https://sqs.us-east-2.amazonaws.com/ACCOUNT/DiscordQueuesStack-discord-queue`
    - `BACKEND_QUEUE_URL=https://sqs.us-east-2.amazonaws.com/ACCOUNT/DiscordQueuesStack-backend-queue`
-4. Enable SQS mode: Set `ENABLE_SQS=true` and `ENABLE_DISCORD_QUEUE=true`
+4. Enable SQS mode: Set `ENABLE_SQS=true`
 
 The bot can be launched from the Docker configuration in [the backend](https://github.com/SC-Market/sc-market-backend).

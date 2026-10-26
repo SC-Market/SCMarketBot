@@ -1,9 +1,7 @@
 import asyncio
-import logging
 import os
 import traceback
 import sys
-from datetime import datetime
 
 import aiohttp
 import discord
@@ -12,20 +10,10 @@ import bugsnag
 from discord import ChannelType
 from discord.ext.commands import Bot
 
-from cogs.admin import Admin
-from cogs.lookup import Lookup
-from cogs.order import order
-from cogs.registration import Registration
-from cogs.stock import stock
-from cogs.subscribe import AlertSubscriptions
-from cogs.price import Price
-from cogs.watchlist import Watchlist
-from cogs.listing import Listing
-from cogs.marketplace import Marketplace
-from cogs.blueprint import Blueprint
-from cogs.help import Help
+from cogs.registry import add_cogs
 
 from util.config import Config
+from util.errors import on_app_command_error
 from util.result import Result
 from util.discord_sqs_consumer import DiscordSQSManager
 from util.logging_config import LoggingConfig
@@ -49,20 +37,13 @@ class SCMarket(Bot):
     discord_sqs_manager = None
 
     async def setup_hook(self):
-        await self.add_cog(Registration(self))
-        await self.add_cog(Admin(self))
-        await self.add_cog(Lookup(self))
-        await self.add_cog(order(self))
-        await self.add_cog(stock(self))
-        await self.add_cog(AlertSubscriptions(self))
-        await self.add_cog(Price(self))
-        await self.add_cog(Watchlist(self))
-        await self.add_cog(Listing(self))
-        await self.add_cog(Marketplace(self))
-        await self.add_cog(Blueprint(self))
-        await self.add_cog(Help(self))
+        await add_cogs(self)
+        # One error handler for every slash command: clear refusal messages
+        # (missing permission, DM-only, ...) and a logged, reported failure otherwise.
+        self.tree.error(on_app_command_error)
 
-        await self.tree.sync()
+        synced = await self.tree.sync()
+        logger.info(f"Synced {len(synced)} application commands")
 
         # Initialize Discord SQS manager if enabled
         if Config.ENABLE_SQS:
@@ -95,38 +76,14 @@ class SCMarket(Bot):
             logger.error("Bot initialization failed due to session error")
             return
 
-    async def on_command_error(self, interaction, error):
-        """Enhanced error handling for command errors"""
-        error_type = type(error).__name__
-        error_msg = str(error)
-        
-        logger.error(f"Command error in {interaction.command.name if interaction.command else 'unknown'}: {error_type}: {error_msg}")
-        logger.error(f"User: {interaction.user.id} ({interaction.user.name})")
-        logger.error(f"Channel: {interaction.channel.id} ({interaction.channel.name if hasattr(interaction.channel, 'name') else 'DM'})")
-        logger.error(f"Guild: {interaction.guild.id if interaction.guild else 'DM'} ({interaction.guild.name if interaction.guild else 'DM'})")
-        logger.error(f"Full error: {traceback.format_exc()}")
+    async def on_app_command_completion(self, interaction, command):
+        """One line per successful slash command, so usage can be counted from the logs."""
+        logger.info(
+            "command_used name=%s guild=%s",
+            getattr(command, "qualified_name", command),
+            interaction.guild_id or "DM",
+        )
 
-        if Config.BUGSNAG_API_KEY:
-            bugsnag.notify(
-                error,
-                context="on_command_error",
-                meta_data={
-                    "command": {
-                        "name": interaction.command.name if interaction.command else None,
-                        "user_id": str(interaction.user.id),
-                    }
-                },
-            )
-
-        # Send user-friendly error message
-        try:
-            if interaction.response.is_done():
-                await interaction.followup.send("An error occurred while processing your command. Please try again or contact support if the issue persists.", ephemeral=True)
-            else:
-                await interaction.response.send_message("An error occurred while processing your command. Please try again or contact support if the issue persists.", ephemeral=True)
-        except Exception as e:
-            logger.error(f"Failed to send error message to user: {e}")
-    
     async def close(self):
         """Clean up resources when the bot shuts down"""
         logger.info("Bot shutdown initiated, cleaning up resources...")
@@ -260,19 +217,6 @@ class SCMarket(Bot):
             logger.error(f"Request body: {body}")
             logger.error(f"Full traceback: {traceback.format_exc()}")
             return dict(thread=None, failed=True, message=f"An unexpected error occurred: {e}", invite_code=None)
-
-    async def verify_invite(self, customer_id, server_id, channel_id, invite_code):
-        """Verify if an existing invite is valid (no creation - handled by backend)"""
-        logger.info(f"Verifying invite: customer_id={customer_id}, server_id={server_id}, channel_id={channel_id}, invite_code={invite_code}")
-        
-        # Since invite creation is now handled by the backend, we just return the provided invite code
-        # The backend will have already created a valid invite
-        if invite_code:
-            logger.info(f"Using invite code provided by backend: {invite_code}")
-            return invite_code
-        else:
-            logger.debug("No invite code provided by backend")
-            return None
 
     async def on_member_join(self, member):
         """Enhanced member join handling with comprehensive logging"""

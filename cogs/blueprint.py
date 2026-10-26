@@ -14,7 +14,7 @@ RARITY_LABELS = {1: "Common", 2: "Uncommon", 3: "Rare", 4: "Epic", 5: "Legendary
 RARITY_COLORS = {1: 0x9e9e9e, 2: 0x4caf50, 3: 0x2196f3, 4: 0x9c27b0, 5: 0xff9800}
 
 
-class Blueprint(commands.GroupCog, group_name="blueprint"):
+class Blueprint(commands.GroupCog, group_name="blueprint", group_description="Look up crafting blueprints and track the ones you own"):
     def __init__(self, bot):
         self.bot = bot
 

@@ -7,7 +7,8 @@ import ujson
 from discord import app_commands
 from discord.ext import commands
 
-from util.fetch import internal_post, get_user_listings, get_user_orgs, get_org_listings
+from util.fetch import internal_post, get_user_listings, get_org_listings
+from util.owners import OWNER_HELP, owner_autocomplete, parse_owner
 
 logger = logging.getLogger('SCMarketBot.PriceCog')
 
@@ -18,8 +19,8 @@ class Price(commands.Cog):
 
     @app_commands.command(name="price", description="Quickly update the price of one of your market listings")
     @app_commands.describe(
-        owner='Listing owner: yourself or a contractor, e.g. My Org Name',
-        listing='The listing to reprice, e.g. Pembroke Armor Set',
+        owner=OWNER_HELP,
+        listing='The listing to reprice; pick from the list, e.g. Pembroke Armor Set',
         new_price='New price in aUEC, e.g. 50000',
     )
     async def set_price(
@@ -31,13 +32,15 @@ class Price(commands.Cog):
     ):
         """Quickly update the price of a market listing"""
         if new_price <= 0:
-            await interaction.response.send_message("Price must be greater than 0.", ephemeral=True)
+            await interaction.response.send_message("❌ The price must be greater than 0 aUEC.", ephemeral=True)
             return
 
         try:
             listing_payload = json.loads(listing)
         except json.JSONDecodeError:
-            await interaction.response.send_message("Invalid listing format. Please try again.", ephemeral=True)
+            await interaction.response.send_message(
+                "❌ Pick the listing from the suggestions list instead of typing it.", ephemeral=True
+            )
             return
 
         listing_id = listing_payload["l"]
@@ -56,7 +59,7 @@ class Price(commands.Cog):
         )
 
         if response.get("error"):
-            await interaction.response.send_message(f"Failed to update price: {response['error']}", ephemeral=True)
+            await interaction.response.send_message(f"❌ Couldn't update the price: {response['error']}", ephemeral=True)
         else:
             await interaction.response.send_message(
                 f"Price for [{listing_payload['t']}](<https://sc-market.space/market/{listing_id}>) "
@@ -72,12 +75,9 @@ class Price(commands.Cog):
             current: str,
     ) -> List[app_commands.Choice[str]]:
         try:
-            if interaction.namespace.owner != "_ME":
-                try:
-                    owner = json.loads(interaction.namespace.owner)
-                    listings = await get_org_listings(owner['s'], interaction.user.id, session=self.bot.session)
-                except json.JSONDecodeError:
-                    return []
+            spectrum_id = parse_owner(interaction.namespace.owner)
+            if spectrum_id:
+                listings = await get_org_listings(spectrum_id, interaction.user.id, session=self.bot.session)
             else:
                 listings = await get_user_listings(interaction.user.id, session=self.bot.session)
 
@@ -107,17 +107,4 @@ class Price(commands.Cog):
             interaction: discord.Interaction,
             current: str,
     ) -> List[app_commands.Choice[str]]:
-        try:
-            orgs = await get_user_orgs(interaction.user.id, session=self.bot.session)
-            choices = [
-                app_commands.Choice(
-                    name=f"{org['name']} ({org['spectrum_id']})",
-                    value=json.dumps(dict(s=org['spectrum_id'], n=org['name']))
-                )
-                for org in orgs if
-                current.lower() in org['name'].lower() or current.lower() in org['spectrum_id'].lower()
-            ][:24] + [app_commands.Choice(name="Me", value='_ME')]
-            return choices
-        except Exception as e:
-            logger.error(f"Error in price owner autocomplete: {e}")
-            return [app_commands.Choice(name="Me", value='_ME')]
+        return await owner_autocomplete(self.bot, interaction, current)

@@ -128,12 +128,12 @@ class Lookup(commands.Cog):
 
         listings = result.get('listings', [])
         if not listings:
-            await interaction.followup.send("No results found")
+            await interaction.followup.send(f"No listings found for **{query}**. Try a shorter search or fewer filters.")
             return
 
         active_listings = [item for item in listings if item.get('quantity_available', 0) > 0]
         if not active_listings:
-            await interaction.followup.send("No results found")
+            await interaction.followup.send(f"No listings for **{query}** are in stock right now. Try `/watchlist add` to get a DM when one is.")
             return
 
         view = SearchResultView(active_listings, interaction.user.id)
