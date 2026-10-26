@@ -175,7 +175,7 @@ class Search(commands.Cog):
         active_listings = [item for item in listings if item.get("quantity_available", 0) > 0]
         if not active_listings:
             await interaction.followup.send(
-                f"No listings for {what} are in stock right now. Try `/watchlist add` to get a DM when one is."
+                f"No listings for {what} are in stock right now. Try `/watchlist add` to get an alert when one is listed at your price."
             )
             return
 

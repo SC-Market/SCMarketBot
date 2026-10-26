@@ -29,11 +29,11 @@ def watch_request(discord_id: str, query: str, max_price: int) -> dict:
     return body
 
 
-class Watchlist(commands.GroupCog, group_name="watchlist", group_description="Get a DM when an item you want is listed at or below your price"):
+class Watchlist(commands.GroupCog, group_name="watchlist", group_description="Get an alert when an item you want is listed at or below your price"):
     def __init__(self, bot):
         self.bot = bot
 
-    @app_commands.command(name="add", description="Watch an item: get a DM when it's listed at or below your target price")
+    @app_commands.command(name="add", description="Watch an item: get an alert when it's listed at or below your target price")
     @app_commands.describe(
         query='Pick an item to watch exactly it, or type words to match in titles, e.g. Medical Supplies',
         max_price='Your target price in aUEC; you get an alert at or below it, e.g. 25000',
@@ -79,7 +79,7 @@ class Watchlist(commands.GroupCog, group_name="watchlist", group_description="Ge
             )
             await interaction.followup.send(embed=embed, ephemeral=True)
 
-    @app_commands.command(name="remove", description="Stop watching an item, so you get no more DMs for it")
+    @app_commands.command(name="remove", description="Stop watching an item, so you get no more alerts for it")
     @app_commands.describe(
         item='Watchlist item to remove; pick from the list, e.g. Medical Supplies (≤ 25,000 aUEC)',
     )
