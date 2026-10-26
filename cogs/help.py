@@ -108,9 +108,10 @@ def alerts_embed() -> discord.Embed:
         name="Webhook",
         value=(
             "A message for the shop events you choose (order created or assigned, status change, review, "
-            "comment, bid). No buttons, no threads. Set it up in your shop's Settings on the website; "
+            "bid). No buttons, no threads. Set it up in your shop's Settings on the website; "
             "`/setup webhook` shows the steps.\n"
-            "-# Needs: Manage Webhooks in Discord to create the URL."
+            "-# Needs: Manage Webhooks in Discord to create the URL; for an org shop, the org's Manage Market "
+            "permission on SC Market."
         ),
         inline=False,
     )

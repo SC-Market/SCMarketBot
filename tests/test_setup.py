@@ -137,6 +137,17 @@ async def test_webhook_explains_the_steps_without_any_permission():
     assert kwargs["ephemeral"] is True
     steps = kwargs["embed"].fields[0].value
     assert "Copy Webhook URL" in steps and "**Webhooks** section" in steps
+    # Shop webhooks need Manage Market, and order comments aren't an event.
+    assert "Manage Market" in steps
+    assert "comment" not in kwargs["embed"].description
+
+
+def test_help_alerts_webhook_names_the_shop_permission_and_real_events():
+    from cogs.help import alerts_embed
+
+    webhook = next(f for f in alerts_embed().fields if f.name == "Webhook")
+    assert "Manage Market" in webhook.value
+    assert "comment" not in webhook.value
 
 
 @pytest.mark.asyncio

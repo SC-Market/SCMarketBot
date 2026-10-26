@@ -122,7 +122,7 @@ def webhook_embed() -> discord.Embed:
         title="Set up a webhook",
         description=(
             "A webhook posts a message for the shop events you pick: order created, order assigned, "
-            "status change, review, comment, and market bid. It has no Claim button and opens no buyer threads, "
+            "status change, review, and market bid. It has no Claim button and opens no buyer threads, "
             "and it works without the bot."
         ),
         color=0x2196F3,
