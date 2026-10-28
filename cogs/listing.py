@@ -19,7 +19,7 @@ import ujson
 from discord import app_commands
 from discord.ext import commands
 
-from util.errors import send_ephemeral
+from util.errors import is_expired_interaction, send_private_after_public_defer
 from util.fetch import get_org_listings, get_user_listings, internal_post
 from util.listings import display_listings_compact
 from util.owners import OWNER_HELP, owner_autocomplete, parse_owner
@@ -225,16 +225,17 @@ class Listing(
             )
             return
 
+        await interaction.response.defer(thinking=True)
         response = await internal_post(
             "/threads/market/price",
             json={"discord_id": str(interaction.user.id), "listing_id": listing_payload["l"], "price": new_price},
             session=self.bot.session,
         )
         if response.get("error"):
-            await interaction.response.send_message(f"❌ Couldn't update the price: {response['error']}", ephemeral=True)
+            await send_private_after_public_defer(interaction, f"❌ Couldn't update the price: {response['error']}")
             return
         old_price = listing_payload.get("p", 0)
-        await interaction.response.send_message(
+        await interaction.followup.send(
             f"Price for {_listing_link(listing_payload)} updated from `{old_price:,}` to `{new_price:,}` aUEC.\n"
             "Buyers now see the new price on the listing.\n"
             "-# Change stock with /listing stock · see all your listings with /listing view"
@@ -267,6 +268,7 @@ class Listing(
             )
             return
         try:
+            await interaction.response.defer(thinking=True)
             response = await internal_post(
                 f"/threads/market/quantity/{STOCK_MODES[mode]}",
                 json={
@@ -277,26 +279,30 @@ class Listing(
                 session=self.bot.session,
             )
             if response.get("error"):
-                await interaction.response.send_message(f"❌ {response['error']}", ephemeral=True)
+                await send_private_after_public_defer(interaction, f"❌ {response['error']}")
                 return
 
             # The backend reports the authoritative before/after quantities;
             # the picker's cached quantity can be stale.
             previous_quantity = response["previous_quantity"]
             new_quantity = response["quantity"]
-            await interaction.response.send_message(
+            await interaction.followup.send(
                 f"Stock for {_listing_link(listing_payload)} changed from `{previous_quantity}` to `{new_quantity}`.\n"
                 f"The listing's available quantity is now updated, so buyers will see `{new_quantity}` available.\n"
                 "-# Check all your stock with /listing view"
             )
-        except Exception:
+        except Exception as e:
+            if is_expired_interaction(e):
+                logger.info("command_expired name=listing stock")
+                return
             logger.error("Stock change failed: %s", traceback.format_exc())
-            await send_ephemeral(interaction, "❌ Couldn't update the stock. Please try again in a moment.")
+            await send_private_after_public_defer(interaction, "❌ Couldn't update the stock. Please try again in a moment.")
 
     @app_commands.command(name="view", description="Show your listings with their available quantity and price")
     @app_commands.describe(owner="Whose listings to show: Me (default) or one of your orgs")
     async def view(self, interaction: discord.Interaction, owner: str = None):
         try:
+            await interaction.response.defer(thinking=True)
             spectrum_id = parse_owner(owner)
             if spectrum_id:
                 listings = await get_org_listings(spectrum_id, interaction.user.id, session=self.bot.session)
@@ -304,14 +310,17 @@ class Listing(
                 listings = await get_user_listings(interaction.user.id, session=self.bot.session)
 
             if not listings or not isinstance(listings, list):
-                await interaction.response.send_message(
-                    "No listings to show. Create one with `/listing create` or on sc-market.space.", ephemeral=True
+                await send_private_after_public_defer(
+                    interaction, "No listings to show. Create one with `/listing create` or on sc-market.space."
                 )
                 return
             await display_listings_compact(interaction, listings)
-        except Exception:
+        except Exception as e:
+            if is_expired_interaction(e):
+                logger.info("command_expired name=listing view")
+                return
             logger.error("Listing view failed: %s", traceback.format_exc())
-            await send_ephemeral(interaction, "❌ Couldn't load your listings. Please try again in a moment.")
+            await send_private_after_public_defer(interaction, "❌ Couldn't load your listings. Please try again in a moment.")
 
     @app_commands.command(name="import", description="Copy your sell listings from another marketplace onto SC Market")
     @app_commands.describe(source="The marketplace to import from", username="Your username there, e.g. spacetrader")

@@ -12,10 +12,18 @@ Listing = listing_module.Listing
 
 
 def _interaction():
+    state = {"done": False}
+
+    async def defer(**kwargs):
+        state["done"] = True
+
     return SimpleNamespace(
         user=SimpleNamespace(id=1234),
-        response=SimpleNamespace(send_message=AsyncMock(), is_done=lambda: False),
+        response=SimpleNamespace(
+            send_message=AsyncMock(), defer=AsyncMock(side_effect=defer), is_done=lambda: state["done"]
+        ),
         followup=SimpleNamespace(send=AsyncMock()),
+        delete_original_response=AsyncMock(),
     )
 
 
@@ -41,7 +49,8 @@ async def test_stock_modes_use_the_backend_quantities(mode, route):
 
     assert post.await_args.args[0] == f"/threads/market/quantity/{route}"
     assert post.await_args.kwargs["json"] == {"quantity": 5, "listing_id": "listing-uuid", "discord_id": "1234"}
-    message = interaction.response.send_message.await_args.args[0]
+    interaction.response.defer.assert_awaited_once_with(thinking=True)
+    message = interaction.followup.send.await_args.args[0]
     assert "changed from `7` to `12`" in message
     assert "`10`" not in message
     assert "/listing view" in message
@@ -52,7 +61,9 @@ async def test_stock_backend_error_is_private():
     interaction = _interaction()
     with patch.object(listing_module, "internal_post", AsyncMock(return_value={"error": "Listing not found"})):
         await Listing.stock.callback(_cog(), interaction, "_ME", LISTING, _mode("add"), 5)
-    interaction.response.send_message.assert_awaited_once_with("❌ Listing not found", ephemeral=True)
+    # The public "thinking..." message is swapped for a private error.
+    interaction.delete_original_response.assert_awaited_once()
+    interaction.followup.send.assert_awaited_once_with("❌ Listing not found", ephemeral=True)
 
 
 @pytest.mark.asyncio
@@ -70,7 +81,8 @@ async def test_price_reply_names_the_old_and_new_price():
     with patch.object(listing_module, "internal_post", AsyncMock(return_value={"result": "Success"})) as post:
         await Listing.price.callback(_cog(), interaction, "_ME", LISTING, 5000)
     assert post.await_args.kwargs["json"] == {"discord_id": "1234", "listing_id": "listing-uuid", "price": 5000}
-    text = interaction.response.send_message.await_args.args[0]
+    interaction.response.defer.assert_awaited_once_with(thinking=True)
+    text = interaction.followup.send.await_args.args[0]
     assert "updated from `4,000` to `5,000` aUEC" in text
 
 

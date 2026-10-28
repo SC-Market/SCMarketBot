@@ -77,3 +77,42 @@ async def test_handler_reports_unexpected_errors_but_not_refusals():
         boom = RuntimeError("boom")
         await errors.on_app_command_error(_interaction(), app_commands.CommandInvokeError(CMD, boom))
         assert notify.call_args.args[0] is boom
+
+
+def _unknown_interaction():
+    import discord
+    response = SimpleNamespace(status=404, reason="Not Found")
+    return discord.NotFound(response, {"code": 10062, "message": "Unknown interaction"})
+
+
+def test_expired_interaction_is_recognised_bare_and_wrapped():
+    expired = _unknown_interaction()
+    assert errors.is_expired_interaction(expired)
+    assert errors.is_expired_interaction(app_commands.CommandInvokeError(CMD, expired))
+    assert not errors.is_expired_interaction(RuntimeError("boom"))
+
+
+@pytest.mark.asyncio
+async def test_expired_interaction_is_logged_not_reported_or_answered():
+    interaction = _interaction()
+    with patch.object(errors.Config, "BUGSNAG_API_KEY", "k"), patch.object(errors.bugsnag, "notify") as notify:
+        await errors.on_app_command_error(interaction, app_commands.CommandInvokeError(CMD, _unknown_interaction()))
+    notify.assert_not_called()
+    interaction.response.send_message.assert_not_awaited()
+    interaction.followup.send.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_send_ephemeral_swallows_an_expired_interaction():
+    interaction = _interaction()
+    interaction.response.send_message.side_effect = _unknown_interaction()
+    await errors.send_ephemeral(interaction, "hi")  # does not raise
+
+
+@pytest.mark.asyncio
+async def test_private_reply_after_public_defer_deletes_the_thinking_message():
+    interaction = _interaction(done=True)
+    interaction.delete_original_response = AsyncMock()
+    await errors.send_private_after_public_defer(interaction, "nope")
+    interaction.delete_original_response.assert_awaited_once()
+    assert interaction.followup.send.await_args.kwargs["ephemeral"] is True

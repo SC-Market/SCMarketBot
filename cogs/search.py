@@ -6,6 +6,7 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
+from util.errors import send_private_after_public_defer
 from util.fetch import public_fetch, search_shops
 from util.listings import create_v2_search_embed, v2_item_types, v2_sorting_methods
 
@@ -141,15 +142,18 @@ class Search(commands.Cog):
         quality_min: int = None,
         quality_max: int = None,
     ):
+        # Acknowledge first: Discord drops the interaction (10062) if the bot
+        # hasn't answered within 3 seconds.
+        await interaction.response.defer(thinking=True)
+
         query = (query or "").strip() or None
         seller = (seller or "").strip() or None
         if not query and not seller:
-            await interaction.response.send_message(
-                "❌ Enter something to search for in `query`, or pick a seller in `seller`.", ephemeral=True
+            await send_private_after_public_defer(
+                interaction, "❌ Enter something to search for in `query`, or pick a seller in `seller`."
             )
             return
 
-        await interaction.response.defer()
         params = search_params(
             query,
             seller,

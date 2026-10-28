@@ -13,7 +13,7 @@ from discord.ext.commands import Bot
 from cogs.registry import add_cogs
 
 from util.config import Config
-from util.errors import on_app_command_error
+from util.errors import is_expired_interaction, on_app_command_error
 from util.result import Result
 from util.discord_sqs_consumer import DiscordSQSManager
 from util.logging_config import LoggingConfig
@@ -106,6 +106,11 @@ class SCMarket(Bot):
 
     def on_error(self, event_method, *args, **kwargs):
         """Enhanced error handling for Discord events"""
+        if is_expired_interaction(sys.exc_info()[1]):
+            # e.g. a Claim button clicked while the bot restarts: too late to
+            # answer, and not a bug to report.
+            logger.info(f"interaction_expired event={event_method}")
+            return
         logger.error(f"Error in Discord event {event_method}: {traceback.format_exc()}")
         logger.error(f"Event args: {args}")
         logger.error(f"Event kwargs: {kwargs}")

@@ -3,6 +3,8 @@ from discord.ext import commands
 from discord import app_commands
 import logging
 
+from util.errors import send_ephemeral
+
 logger = logging.getLogger('SCMarketBot.AdminCog')
 
 # Staff only. No staff server is configured, so instead of a guild-only
@@ -136,11 +138,12 @@ class Admin(commands.GroupCog, group_description="Bot maintenance tools (SC Mark
             from util.config import Config
             queue_name = Config.DISCORD_QUEUE_URL.split('/')[-1]
             
-            # Get queue attributes
+            # The SQS call can be slow: acknowledge before making it.
+            await interaction.response.defer(ephemeral=True, thinking=True)
             attributes = await manager.sqs_client.get_queue_attributes(queue_name)
             
             if not attributes:
-                await interaction.response.send_message("Could not retrieve queue attributes", ephemeral=True)
+                await send_ephemeral(interaction, "Could not retrieve queue attributes")
                 return
             
             # Create queue status embed
@@ -194,11 +197,11 @@ class Admin(commands.GroupCog, group_description="Bot maintenance tools (SC Mark
                     inline=True
                 )
             
-            await interaction.response.send_message(embed=embed, ephemeral=True)
+            await send_ephemeral(interaction, embed=embed)
             
         except Exception as e:
             logger.error(f"Error getting queue status: {e}")
-            await interaction.response.send_message(f"Error getting queue status: {e}", ephemeral=True)
+            await send_ephemeral(interaction, f"Error getting queue status: {e}")
     
     @app_commands.command(name="admin_info", description="Show admin config and your authorization status")
     async def admin_info(self, interaction: discord.Interaction):

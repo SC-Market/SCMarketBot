@@ -10,10 +10,20 @@ Search = search_module.Search
 
 
 def _interaction():
+    state = {"done": False}
+
+    async def defer(**kwargs):
+        state["done"] = True
+
     return SimpleNamespace(
         user=SimpleNamespace(id=1),
-        response=SimpleNamespace(defer=AsyncMock(), send_message=AsyncMock()),
+        response=SimpleNamespace(
+            defer=AsyncMock(side_effect=defer),
+            send_message=AsyncMock(),
+            is_done=lambda: state["done"],
+        ),
         followup=SimpleNamespace(send=AsyncMock()),
+        delete_original_response=AsyncMock(),
     )
 
 
@@ -30,7 +40,27 @@ async def test_needs_a_query_or_a_seller():
     with patch.object(search_module, "public_fetch", AsyncMock()) as fetch:
         await _search(interaction, query="  ")
     fetch.assert_not_awaited()
-    assert interaction.response.send_message.await_args.kwargs == {"ephemeral": True}
+    interaction.response.defer.assert_awaited_once_with(thinking=True)
+    # The public "thinking..." message is replaced by a private hint.
+    interaction.delete_original_response.assert_awaited_once()
+    interaction.response.send_message.assert_not_awaited()
+    assert interaction.followup.send.await_args.kwargs == {"ephemeral": True}
+
+
+@pytest.mark.asyncio
+async def test_defers_before_calling_the_backend():
+    interaction = _interaction()
+    calls = []
+    interaction.response.defer.side_effect = lambda **kw: calls.append("defer")
+
+    async def fetch(*args, **kwargs):
+        calls.append("fetch")
+        return {"listings": []}
+
+    with patch.object(search_module, "public_fetch", fetch):
+        await _search(interaction, query="Gown")
+    assert calls == ["defer", "fetch"]
+    interaction.response.defer.assert_awaited_once_with(thinking=True)
 
 
 @pytest.mark.asyncio
