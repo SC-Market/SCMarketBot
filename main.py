@@ -503,7 +503,11 @@ def main():
     # Log startup information
     LoggingConfig.log_startup_info()
     
-    bot = SCMarket(intents=intents, command_prefix="/")
+    # No startup member chunking: nothing reads the member cache (permissions
+    # and roles come with each interaction, on_member_join is a gateway event,
+    # thread adds use ids). Chunking every guild hit the gateway send limit and
+    # held the bot ~58s after each restart, so interactions arrived expired.
+    bot = SCMarket(intents=intents, command_prefix="/", chunk_guilds_at_startup=False)
     
     try:
         logger.info("Starting bot...")
