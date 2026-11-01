@@ -4,6 +4,7 @@ import logging
 import discord
 
 from util.fetch import internal_post
+from util.site import site_url
 
 logger = logging.getLogger('SCMarketBot.MarketplaceCog')
 
@@ -56,8 +57,10 @@ class BuyModal(discord.ui.Modal, title="Place Order"):
             await interaction.followup.send(f"❌ Couldn't place the order: {response['error']}", ephemeral=True)
         else:
             total = self.price * qty
+            order_id = response.get("order_id")
             embed = discord.Embed(
                 title="Order Placed",
+                url=site_url("contract", order_id) if order_id else None,
                 description=f"**{self.listing_title}** x{qty}\n"
                             f"Total: {total:,} aUEC\n\n"
                             f"The seller has been notified. Check your DMs or fulfillment thread for updates.",
@@ -126,8 +129,10 @@ class OfferModal(discord.ui.Modal, title="Make an Offer"):
         if response.get("error"):
             await interaction.followup.send(f"❌ Couldn't send the offer: {response['error']}", ephemeral=True)
         else:
+            session_id = response.get("session_id")
             embed = discord.Embed(
                 title="Offer Sent",
+                url=site_url("offer", session_id) if session_id else None,
                 description=f"**{self.listing_title}** x{qty}\n"
                             f"Your offer: {amount:,} aUEC\n\n"
                             f"The seller will be notified. You'll hear back when they respond.",

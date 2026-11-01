@@ -13,6 +13,8 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
+from util.site import SITE
+
 logger = logging.getLogger("SCMarketBot.HelpCog")
 
 EMBED_COLOR = 0x2196F3
@@ -167,6 +169,7 @@ class Help(commands.Cog):
     def _overview_embed(self) -> discord.Embed:
         embed = discord.Embed(
             title="SC Market Bot",
+            url=SITE,
             description=SETUP_STEPS,
             color=EMBED_COLOR,
         )
@@ -201,6 +204,7 @@ class Help(commands.Cog):
                 continue
             embed = discord.Embed(
                 title=f"/{cmd.name}",
+                url=SITE,
                 description=_describe(cmd),
                 color=EMBED_COLOR,
             )

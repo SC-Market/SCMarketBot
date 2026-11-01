@@ -6,6 +6,7 @@ from discord import app_commands
 from discord.ext import commands
 
 from util.fetch import internal_post, internal_fetch, public_fetch
+from util.site import site_url
 
 logger = logging.getLogger('SCMarketBot.WatchlistCog')
 
@@ -63,8 +64,10 @@ class Watchlist(commands.GroupCog, group_name="watchlist", group_description="Ge
             item = response.get("item") or {}
             name = item.get("query") or query
             kind = "this exact item" if item.get("game_item_id") else "listings with that name in the title"
+            game_item_id = item.get("game_item_id")
             embed = discord.Embed(
                 title="Watchlist Updated",
+                url=site_url("wiki", "items", game_item_id) if game_item_id else None,
                 description=f"You'll be alerted when **{name}** is listed at or below **{max_price:,} aUEC** "
                             f"(matching {kind}).",
                 color=0x10b881,

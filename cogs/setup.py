@@ -21,10 +21,10 @@ from discord.ext import commands
 from util import channel_setups
 from util.checks import guild_manage_channels, guild_only
 from util.owners import org_autocomplete
+from util.site import SITE
 
 logger = logging.getLogger("SCMarketBot.SetupCog")
 
-SITE = "https://sc-market.space"
 THREADS = "threads"
 ALERTS = "alerts"
 CONTRACTS = "contracts"

@@ -7,6 +7,7 @@ from discord import app_commands
 from discord.ext import commands
 
 from util.fetch import internal_fetch, internal_post
+from util.site import site_url
 
 logger = logging.getLogger('SCMarketBot.BlueprintCog')
 
@@ -47,6 +48,7 @@ class Blueprint(commands.GroupCog, group_name="blueprint", group_description="Lo
 
         embed = discord.Embed(
             title=f"Blueprint Search: {query}",
+            url=site_url("blueprints"),
             color=0x5865F2,
         )
 
@@ -108,6 +110,7 @@ class Blueprint(commands.GroupCog, group_name="blueprint", group_description="Lo
 
         embed = discord.Embed(
             title=f"📘 {bp_name}",
+            url=site_url("blueprints", blueprint_id),
             color=0x2196f3,
         )
 
@@ -273,6 +276,7 @@ class Blueprint(commands.GroupCog, group_name="blueprint", group_description="Lo
 
         embed = discord.Embed(
             title="Your Blueprint Inventory",
+            url=site_url("blueprints", "inventory"),
             description=f"**{total_owned}** / {total_available} blueprints owned ({total_owned * 100 // max(total_available, 1)}%)",
             color=0x5865F2,
         )

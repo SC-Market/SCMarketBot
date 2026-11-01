@@ -23,10 +23,10 @@ from util.errors import is_expired_interaction, send_private_after_public_defer
 from util.fetch import get_org_listings, get_user_listings, internal_post
 from util.listings import display_listings_compact
 from util.owners import OWNER_HELP, owner_autocomplete, parse_owner
+from util.site import SITE
 
 logger = logging.getLogger("SCMarketBot.ListingCog")
 
-SITE = "https://sc-market.space"
 UEX_API_BASE = "https://api.uexcorp.space/2.0"
 LISTING_HELP = "The listing to change; pick from the list, e.g. Pembroke Armor Set"
 
@@ -164,8 +164,8 @@ class UEXImportView(discord.ui.View):
                 name="What's next",
                 value=(
                     "Your imported listings are now live on SC Market, and buyers can find them with `/search`.\n"
-                    "-# Change prices or stock with /listing price and /listing stock, or at "
-                    f"{SITE}/market/manage"
+                    "-# Change prices or stock with /listing price and /listing stock, or on the "
+                    "manage page linked above"
                 ),
                 inline=False,
             )
