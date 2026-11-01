@@ -15,7 +15,7 @@ from util.config import Config
 
 logger = logging.getLogger("SCMarketBot.Errors")
 
-SUPPORT_HINT = "If it keeps happening, ask in the SC Market Discord: https://discord.gg/scmarket"
+SUPPORT_HINT = "If it keeps happening, ask in the SC Market Discord: https://discord.com/invite/N4Gy8py8J4"
 
 
 def _perm_label(name: str) -> str:

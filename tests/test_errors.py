@@ -50,7 +50,7 @@ def test_unexpected_error_is_generic_with_support_hint():
     msg = errors.describe_error(_interaction(), app_commands.CommandInvokeError(CMD, RuntimeError("boom")))
     assert msg.startswith("❌ Something went wrong running `/subscribe alerts`")
     assert "boom" not in msg
-    assert "discord.gg/scmarket" in msg
+    assert "discord.com/invite/N4Gy8py8J4" in msg
 
 
 def test_no_command_context():
