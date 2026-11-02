@@ -17,6 +17,7 @@ from util.errors import is_expired_interaction, on_app_command_error
 from util.result import Result
 from util.discord_sqs_consumer import DiscordSQSManager
 from util.dm_results import report_dm_result, SOURCE_THREAD_INVITE
+from util.user_installs import UserInstallReporter
 from util.logging_config import LoggingConfig
 from util.thread_planning import (
     build_thread_name,
@@ -36,6 +37,7 @@ logger = LoggingConfig.setup_logging()
 class SCMarket(Bot):
     session = None
     discord_sqs_manager = None
+    user_installs = UserInstallReporter()
 
     async def setup_hook(self):
         await add_cogs(self)
@@ -76,6 +78,15 @@ class SCMarket(Bot):
             logger.error("Failed to initialize aiohttp session")
             logger.error("Bot initialization failed due to session error")
             return
+
+    async def on_interaction(self, interaction):
+        """Every interaction: report users who installed the app on their own account.
+
+        They are reachable by DM even without a shared server (seller
+        reachability, util/user_installs.py). Commands are handled by the tree
+        as before; this only reads authorizing_integration_owners.
+        """
+        await self.user_installs.observe(self, interaction)
 
     async def on_app_command_completion(self, interaction, command):
         """One line per successful slash command, so usage can be counted from the logs."""
