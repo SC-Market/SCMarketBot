@@ -16,6 +16,7 @@ from util.config import Config
 from util.errors import is_expired_interaction, on_app_command_error
 from util.result import Result
 from util.discord_sqs_consumer import DiscordSQSManager
+from util.dm_results import report_dm_result, SOURCE_THREAD_INVITE
 from util.logging_config import LoggingConfig
 from util.thread_planning import (
     build_thread_name,
@@ -448,18 +449,24 @@ class SCMarket(Bot):
                     logger.info(f"Created invite: {invite.code}")
                     
                     for member in failed_members:
+                        # Every attempt (sent / failed with Discord's error code)
+                        # goes to the backend's DM attempt log (util/dm_results.py).
                         try:
                             user = await self.fetch_user(int(member))
                             invite_message = f"You submitted an offer on SC Market. Please join the fulfillment server to communicate directly with the seller: {invite}"
                             await user.send(invite_message)
                             logger.info(f"Sent invite message to user {member}")
+                            await report_dm_result(self, member, SOURCE_THREAD_INVITE)
                         except discord.Forbidden as e:
                             logger.debug(f"Cannot send DM to user {member}: {e} - this is a configuration issue")
+                            await report_dm_result(self, member, SOURCE_THREAD_INVITE, e)
                         except discord.NotFound as e:
                             logger.debug(f"User {member} not found: {e} - this may be a configuration issue")
+                            await report_dm_result(self, member, SOURCE_THREAD_INVITE, e)
                         except Exception as e:
                             logger.error(f"Failed to send invite message to user {member}: {e}")
                             logger.error(f"Error type: {type(e).__name__}")
+                            await report_dm_result(self, member, SOURCE_THREAD_INVITE, e)
                             
                 except discord.Forbidden as e:
                     logger.debug(f"Bot lacks permission to create invite in channel {channel.name}: {e} - this is a configuration issue")
