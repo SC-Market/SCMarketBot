@@ -7,6 +7,13 @@
 - ``/setup status``: what this channel gets.
 - ``/setup remove kind [org]``: stop threads, alerts or the contract feed here.
 
+These are the fallback for a bot added from inside Discord. Added from a
+shop's or org's Discord settings on the website, the server comes back
+linked and threads and alerts are picked there (backend
+services/discord/install-oauth.ts), so /setup threads and /setup alerts are
+optional for shops and orgs. Personal threads and the contract feed are
+still set up here.
+
 Discord side: threads, alerts and remove need Manage Channels. SC Market side
 (checked by the backend): an org needs Manage Webhooks for threads and Manage
 Orders or Manage Webhooks for alerts and the contract feed; leaving ``org``
@@ -165,7 +172,8 @@ def status_embed(setups: list) -> discord.Embed:
             description=(
                 "Run `/setup threads` for a private thread with the buyer for each order, or "
                 "`/setup alerts` for a post with a Claim button for each new order. "
-                "`/help alerts` compares them."
+                "`/help alerts` compares them.\n"
+                f"-# For a shop or org you can also pick channels on {SITE}, in its Discord settings."
             ),
             color=0x2196F3,
         )

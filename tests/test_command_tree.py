@@ -136,6 +136,8 @@ async def test_help_overview_fits_discord_limits_and_starts_with_setup(bot):
     assert len(embed.fields) <= 25
     assert all(len(f.value) <= 1024 for f in embed.fields)
     assert "Get started in 3 steps" in embed.description
+    # The website's install flow comes first; the commands are the fallback.
+    assert embed.description.index("Add the bot to a server") < embed.description.index("/setup threads")
     assert "/setup threads" in embed.description and "/setup alerts" in embed.description
     text = "\n".join(f.value for f in embed.fields)
     assert "/admin" not in text  # staff-only, hidden

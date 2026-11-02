@@ -42,7 +42,11 @@ AREAS = {
 ALERTS_TOPIC = "alerts"
 
 SETUP_STEPS = (
-    "**Get started in 3 steps**\n"
+    "**Easiest: add the bot from SC Market**\n"
+    f"On {SITE}, open your shop's **Settings › Discord** or your org's **Discord Integration** tab and press "
+    "**Add the bot to a server**. The server comes back linked: pick the channels for order threads and alerts "
+    "there, with no commands.\n\n"
+    "**Added the bot from Discord instead? Get started in 3 steps**\n"
     "1. **Link your Discord** on sc-market.space (Settings). The bot knows you by your Discord account.\n"
     f"2. **[Add the bot]({BOT_INVITE})** to your server.\n"
     "3. **In the channel you want to use, run `/setup threads` or `/setup alerts`** "
