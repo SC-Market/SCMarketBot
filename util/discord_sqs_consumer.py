@@ -6,7 +6,7 @@ from typing import Dict, Any, Optional
 from datetime import datetime
 
 from util.config import Config
-from util.thread_planning import validate_create_thread_fields
+from util.thread_planning import thread_created_payload, validate_create_thread_fields
 
 logger = logging.getLogger('SCMarketBot.DiscordSQSConsumer')
 
@@ -181,13 +181,11 @@ class DiscordSQSConsumer:
                 # CRITICAL FIX: Ensure we're sending the business entity ID, not the thread ID
                 logger.debug(f"Sending response: thread_id={new_thread_id}, original_order_id={business_entity_id}")
                 
-                # Send success response
+                # Send success response (with who couldn't be added and their
+                # invite: the backend DMs it, following their settings)
                 response = DiscordSQSResponse(
                     'thread_created',
-                    {
-                        'thread_id': new_thread_id,
-                        'success': True
-                    },
+                    thread_created_payload(result.get('thread')),
                     {
                         'discord_message_id': None,  # TODO: Add if we send a welcome message
                         'original_order_id': business_entity_id,  # ← FIXED: Use business entity ID, not thread ID

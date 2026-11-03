@@ -83,3 +83,44 @@ def test_build_thread_name_for_offer_uses_id():
 def test_build_thread_name_handles_missing_ids():
     # Should not raise even when both ids are absent.
     assert build_thread_name({}) == "offer-"
+
+
+# --- thread_created_payload -------------------------------------------------
+# The "join the server" invite DM is sent by the backend through its
+# notification system (it follows the person's settings and says order or
+# offer); the bot reports who it couldn't add and the invite.
+
+from util.thread_planning import thread_created_payload
+
+
+def test_thread_created_payload_reports_unadded_members_and_invite():
+    payload = thread_created_payload(
+        {"thread_id": "999", "failed": [111, 222], "invite_code": "abcDEF"}
+    )
+    assert payload == {
+        "thread_id": "999",
+        "success": True,
+        "invite_members": ["111", "222"],
+        "invite_code": "abcDEF",
+    }
+
+
+def test_thread_created_payload_without_failed_members_or_invite():
+    assert thread_created_payload({"thread_id": "1", "failed": [], "invite_code": None}) == {
+        "thread_id": "1",
+        "success": True,
+    }
+    # No invite could be created (missing permission): nothing to DM.
+    assert thread_created_payload({"thread_id": "1", "failed": [5], "invite_code": None}) == {
+        "thread_id": "1",
+        "success": True,
+    }
+    assert thread_created_payload(None) == {"thread_id": None, "success": True}
+
+
+def test_bot_no_longer_dms_the_invite_itself():
+    import pathlib
+
+    source = (pathlib.Path(__file__).resolve().parents[1] / "main.py").read_text()
+    assert "You submitted an offer on SC Market" not in source
+    assert "SOURCE_THREAD_INVITE" not in source

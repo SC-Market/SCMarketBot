@@ -59,3 +59,23 @@ def build_thread_name(offer: dict) -> str:
     entity_id = offer.get("id", offer.get("order_id")) or ""
     prefix = "order" if is_order else "offer"
     return f"{prefix}-{str(entity_id)[:8]}"
+
+
+def thread_created_payload(thread_result: Optional[dict]) -> dict:
+    """The ``thread_created`` reply payload for a created thread.
+
+    ``thread_result`` is ``create_thread``'s value: ``thread_id``, ``failed``
+    (the Discord ids the bot couldn't add) and ``invite_code`` (the server
+    invite made for them, or None). The backend DMs them the invite through
+    its notification system (sc-market-backend services/discord/
+    thread-invite.ts), so it follows their notification settings; the bot no
+    longer DMs it itself.
+    """
+    result = thread_result or {}
+    payload = {"thread_id": result.get("thread_id"), "success": True}
+    failed = [str(m) for m in (result.get("failed") or []) if m]
+    invite_code = result.get("invite_code")
+    if failed and invite_code:
+        payload["invite_members"] = failed
+        payload["invite_code"] = str(invite_code)
+    return payload
