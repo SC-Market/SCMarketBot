@@ -30,6 +30,22 @@ def watch_request(discord_id: str, query: str, max_price: int) -> dict:
     return body
 
 
+def watch_line(item: dict) -> str:
+    """One /watchlist list entry: target price, minimum quality, current lowest, paused.
+
+    Minimum quality and pausing are set on the site (Settings > Price Alerts)
+    and apply to the bot's watches too, so the list shows them.
+    """
+    line = f"Alert when ≤ **{item['max_price']:,} aUEC**"
+    if item.get("min_quality_tier"):
+        line += f", quality tier {item['min_quality_tier']}+"
+    if item.get("current_lowest"):
+        line += f" (current: {item['current_lowest']:,} aUEC)"
+    if item.get("paused"):
+        line += "\n⏸️ Paused: no alerts until you resume it on the site"
+    return line + f"\nID: `{item['id']}`"
+
+
 class Watchlist(commands.GroupCog, group_name="watchlist", group_description="Get an alert when an item you want is listed at or below your price"):
     def __init__(self, bot):
         self.bot = bot
@@ -76,7 +92,8 @@ class Watchlist(commands.GroupCog, group_name="watchlist", group_description="Ge
                 name="What's next",
                 value="When a public listing hits your target price you get an alert: a DM here, plus a "
                       "site notification and push; email is off until you turn it on. Choose channels in "
-                      "Settings → Price Alerts on sc-market.space.\n"
+                      "Settings › Notifications on sc-market.space, and edit, pause or set a minimum quality "
+                      "in Settings › Price Alerts.\n"
                       "-# Stop alerts with /watchlist remove · see everything you watch with /watchlist list",
                 inline=False,
             )
@@ -132,16 +149,20 @@ class Watchlist(commands.GroupCog, group_name="watchlist", group_description="Ge
             color=0x5865F2,
         )
 
-        for item in items[:25]:
-            current_price_text = ""
-            if item.get("current_lowest"):
-                current_price_text = f" (current: {item['current_lowest']:,} aUEC)"
+        # Discord allows 25 fields per embed; one is the "Edit on the site" link.
+        for item in items[:24]:
             embed.add_field(
                 name=f"{item['query']}",
-                value=f"Alert when ≤ **{item['max_price']:,} aUEC**{current_price_text}\nID: `{item['id']}`",
+                value=watch_line(item),
                 inline=False,
             )
 
+        embed.add_field(
+            name="Edit on the site",
+            value=f"Change target prices, set a minimum quality or pause alerts in "
+                  f"[Settings › Price Alerts]({site_url('settings')}?tab=price-alerts).",
+            inline=False,
+        )
         embed.set_footer(text=f"{len(items)} item(s) watched")
         await interaction.followup.send(embed=embed, ephemeral=True)
 
